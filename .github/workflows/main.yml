@@ -1,55 +1,41 @@
 name: Sync Fork
- 
+
 on:
-schedule:
-# Voert de taak elke dag om 03:00 UTC uit
-- cron: '0 3 * * *'
-workflow_dispatch:
-# Voegt een knop toe op de Actions-pagina om de taak handmatig te starten
- 
+  schedule:
+    # Voert de taak elke dag om 03:00 UTC uit
+    - cron: '0 3 * * *'
+  workflow_dispatch: # Hiermee kun je handmatig starten via de Actions-pagina
+
 jobs:
-sync:
-runs-on: ubuntu-latest
- 
-steps:
-  - name: Checkout Fork
-    uses: actions/checkout@v4
-    with:
-      # We hebben een Personal Access Token (PAT) nodig met repo-rechten
-      # om te kunnen pushen naar de fork.
-      token: ${{ secrets.GH_PAT }}
-      fetch-depth: 0 # Haal de volledige geschiedenis op
- 
-  - name: Set up remote upstream
-    run: |
-      # Voeg de officiële Odoo repo toe als 'upstream'
-      git remote add upstream [https://github.com/odoo/odoo.git](https://github.com/odoo/odoo.git)
- 
-  - name: Sync branches
-    run: |
-      git config --global user.name 'GitHub Actions Sync'
-      git config --global user.email 'actions@github.com'
-      
-      # Haal alle branches van upstream op
-      git fetch upstream
- 
-      # Loop door de belangrijkste Odoo branches die je wilt syncen
-      for branch in 15.0 16.0 17.0 master; do
-        echo "--- Syncing branch $branch ---"
-        
-        # Switch naar de lokale branch
-        git checkout $branch
-        
-        # Pull de laatste changes van de fork zelf (voor de zekerheid)
-        git pull origin $branch
-        
-        # Merge de changes van upstream
-        # --no-edit voorkomt dat de merge een editor opent
-        git merge --no-ff --no-edit "upstream/$branch"
-        
-        # Push de bijgewerkte branch naar je fork (origin)
-        git push origin $branch
-        
-        echo "--- Branch $branch synced ---"
-        echo ""
-      done
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Fork
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+          fetch-depth: 0
+
+      - name: Set up remote upstream
+        run: |
+          git remote add upstream https://github.com/odoo/odoo.git
+
+      - name: Sync branches
+        run: |
+          git config --global user.name 'GitHub Actions Sync'
+          git config --global user.email 'actions@github.com'
+
+          git fetch upstream
+
+          for branch in 15.0 16.0 17.0 master; do
+            echo "--- Syncing branch $branch ---"
+
+            git checkout $branch || git checkout -b $branch origin/$branch
+            git pull origin $branch
+            git merge --no-ff --no-edit "upstream/$branch"
+            git push origin $branch
+
+            echo "--- Branch $branch synced ---"
+            echo ""
+          done
