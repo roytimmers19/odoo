@@ -1,0 +1,41 @@
+name: Sync Fork
+
+on:
+  schedule:
+    # Voert de taak elke dag om 03:00 UTC uit
+    - cron: '0 3 * * *'
+  workflow_dispatch: # Hiermee kun je handmatig starten via de Actions-pagina
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Fork
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+          fetch-depth: 0
+
+      - name: Set up remote upstream
+        run: |
+          git remote add upstream https://github.com/odoo/odoo.git
+
+      - name: Sync branches
+        run: |
+          git config --global user.name 'GitHub Actions Sync'
+          git config --global user.email 'actions@github.com'
+
+          git fetch upstream
+
+          for branch in 18.0; do
+            echo "--- Syncing branch $branch ---"
+
+            git checkout $branch || git checkout -b $branch origin/$branch
+            git pull origin $branch
+            git merge --no-ff --no-edit "upstream/$branch"
+            git push origin $branch
+
+            echo "--- Branch $branch synced ---"
+            echo ""
+          done
