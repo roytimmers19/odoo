@@ -2,40 +2,42 @@ name: Sync Fork
 
 on:
   schedule:
-    # Voert de taak elke dag om 03:00 UTC uit
     - cron: '0 3 * * *'
-  workflow_dispatch: # Hiermee kun je handmatig starten via de Actions-pagina
+  workflow_dispatch:
 
 jobs:
   sync:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
-      - name: Checkout Fork
+      - name: Checkout fork
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GH_PAT }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
-      - name: Set up remote upstream
+      - name: Configure Git
         run: |
-          git remote add upstream https://github.com/odoo/odoo.git
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
 
-      - name: Sync branches
+      - name: Add upstream remote
+        run: git remote add upstream https://github.com/odoo/odoo.git
+
+      - name: Fetch upstream
+        run: git fetch upstream
+
+      - name: Sync configured branches
         run: |
-          git config --global user.name 'GitHub Actions Sync'
-          git config --global user.email 'actions@github.com'
-
-          git fetch upstream
-
-          for branch in 18.0; do
-            echo "--- Syncing branch $branch ---"
-
-            git checkout $branch || git checkout -b $branch origin/$branch
-            git pull origin $branch
-            git merge --no-ff --no-edit "upstream/$branch"
-            git push origin $branch
-
-            echo "--- Branch $branch synced ---"
+          echo "🔧 Syncing branches from variable: ${{ vars.SYNC_BRANCHES }}"
+          for BRANCH in ${{ vars.SYNC_BRANCHES }}; do
+            echo "🔁 Syncing $BRANCH..."
+            git checkout $BRANCH || git checkout -b $BRANCH origin/$BRANCH
+            git pull origin $BRANCH || echo "ℹ️ Pull skipped (new branch?)"
+            git merge --no-ff --no-edit upstream/$BRANCH || echo "⚠️ Merge conflict in $BRANCH"
+            git push origin $BRANCH
+            echo "✅ Done syncing $BRANCH"
             echo ""
           done
