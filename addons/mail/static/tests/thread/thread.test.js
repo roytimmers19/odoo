@@ -726,6 +726,7 @@ test("Thread messages are only loaded once", async () => {
 test.tags("focus required");
 test("Opening thread with needaction messages should mark all messages of thread as read", async () => {
     const pyEnv = await startServer();
+    pyEnv["res.users"].write(serverState.userId, { notification_type: "inbox" });
     const channelId = pyEnv["discuss.channel"].create({ name: "General" });
     const partnerId = pyEnv["res.partner"].create({ name: "Demo" });
     onRpc("mail.message", "mark_all_as_read", ({ args }) => {
@@ -740,7 +741,7 @@ test("Opening thread with needaction messages should mark all messages of thread
     await contains(".o-mail-Composer-input");
     await triggerEvents(".o-mail-Composer-input", ["blur", "focusout"]);
     await click("button", { text: "Inbox" });
-    await contains("h4", { text: "Your inbox is empty" });
+    await contains("h4", { text: "Congratulations, your inbox is empty" });
     const messageId = pyEnv["mail.message"].create({
         author_id: partnerId,
         body: "@Mitchel Admin",
@@ -756,14 +757,13 @@ test("Opening thread with needaction messages should mark all messages of thread
     });
     // simulate receiving a new needaction message
     const [partner] = pyEnv["res.partner"].read(serverState.partnerId);
-    pyEnv["bus.bus"]._sendone(
-        partner,
-        "mail.message/inbox",
-        new mailDataHelpers.Store(
+    pyEnv["bus.bus"]._sendone(partner, "mail.message/inbox", {
+        message_id: messageId,
+        store_data: new mailDataHelpers.Store(
             pyEnv["mail.message"].browse(messageId),
             makeKwArgs({ for_current_user: true, add_followers: true })
-        ).get_result()
-    );
+        ).get_result(),
+    });
     await contains("button", { text: "Inbox", contains: [".badge", { text: "1" }] });
     await click("button", { text: "General" });
     await contains(".o-discuss-badge", { count: 0 });
@@ -773,6 +773,7 @@ test("Opening thread with needaction messages should mark all messages of thread
 
 test("[technical] Opening thread without needaction messages should not mark all messages of thread as read", async () => {
     const pyEnv = await startServer();
+    pyEnv["res.users"].write(serverState.userId, { notification_type: "inbox" });
     const channelId = pyEnv["discuss.channel"].create({ name: "General" });
     onRpc("mail.message", "mark_all_as_read", () => asyncStep("mark-all-messages-as-read"));
     await start();

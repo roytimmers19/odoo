@@ -62,7 +62,7 @@ test("sanity check", async () => {
         stepsAfter: ['/mail/inbox/messages - {"fetch_params":{"limit":30}}'],
     });
     await contains(".o-mail-DiscussSidebar");
-    await contains("h4:contains(Your inbox is empty)");
+    await contains("h4:contains('Congratulations, your inbox is empty')");
 });
 
 test.tags("focus required");
@@ -471,6 +471,7 @@ test("Can reply to history message", async () => {
 
 test("receive new needaction messages", async () => {
     const pyEnv = await startServer();
+    pyEnv["res.users"].write(serverState.userId, { notification_type: "inbox" });
     const partnerId = pyEnv["res.partner"].create({ name: "Frodo Baggins" });
     await start();
     await openDiscuss("mail.box_inbox");
@@ -491,14 +492,13 @@ test("receive new needaction messages", async () => {
         res_partner_id: serverState.partnerId,
     });
     const [partner] = pyEnv["res.partner"].read(serverState.partnerId);
-    pyEnv["bus.bus"]._sendone(
-        partner,
-        "mail.message/inbox",
-        new mailDataHelpers.Store(
+    pyEnv["bus.bus"]._sendone(partner, "mail.message/inbox", {
+        message_id: messageId_1,
+        store_data: new mailDataHelpers.Store(
             pyEnv["mail.message"].browse(messageId_1),
             makeKwArgs({ for_current_user: true, add_followers: true })
-        ).get_result()
-    );
+        ).get_result(),
+    });
     await contains("button", { text: "Inbox", contains: [".badge", { text: "1" }] });
     await contains(".o-mail-Message");
     await contains(".o-mail-Message-content", { text: "not empty 1" });
@@ -516,14 +516,13 @@ test("receive new needaction messages", async () => {
         notification_type: "inbox",
         res_partner_id: serverState.partnerId,
     });
-    pyEnv["bus.bus"]._sendone(
-        partner,
-        "mail.message/inbox",
-        new mailDataHelpers.Store(
+    pyEnv["bus.bus"]._sendone(partner, "mail.message/inbox", {
+        message_id: messageId_2,
+        store_data: new mailDataHelpers.Store(
             pyEnv["mail.message"].browse(messageId_2),
             makeKwArgs({ for_current_user: true, add_followers: true })
-        ).get_result()
-    );
+        ).get_result(),
+    });
     await contains("button", { text: "Inbox", contains: [".badge", { text: "2" }] });
     await contains(".o-mail-Message", { count: 2 });
     await contains(".o-mail-Message-content", { text: "not empty 1" });
@@ -532,6 +531,7 @@ test("receive new needaction messages", async () => {
 
 test("receive a message that is not linked to thread", async () => {
     const pyEnv = await startServer();
+    pyEnv["res.users"].write(serverState.userId, { notification_type: "inbox" });
     const partnerId = pyEnv["res.partner"].create({ name: "Frodo Baggins" });
     await start();
     await openDiscuss("mail.box_inbox");
@@ -550,14 +550,13 @@ test("receive a message that is not linked to thread", async () => {
         res_partner_id: serverState.partnerId,
     });
     const [partner] = pyEnv["res.partner"].read(serverState.partnerId);
-    pyEnv["bus.bus"]._sendone(
-        partner,
-        "mail.message/inbox",
-        new mailDataHelpers.Store(
+    pyEnv["bus.bus"]._sendone(partner, "mail.message/inbox", {
+        message_id: messageId_1,
+        store_data: new mailDataHelpers.Store(
             pyEnv["mail.message"].browse(messageId_1),
             makeKwArgs({ for_current_user: true, add_followers: true })
-        ).get_result()
-    );
+        ).get_result(),
+    });
     await contains("button", { text: "Inbox", contains: [".badge", { text: "1" }] });
     await contains(".o-mail-Message");
     await contains(".o-mail-Message-content", { text: "needaction message" });
@@ -572,6 +571,8 @@ test("basic rendering", async () => {
 });
 
 test("basic rendering: sidebar", async () => {
+    const pyEnv = await startServer();
+    pyEnv["res.users"].write(serverState.userId, { notification_type: "inbox" });
     await start();
     await openDiscuss();
     await contains(".o-mail-DiscussSidebar button", { text: "Inbox" });
@@ -583,6 +584,8 @@ test("basic rendering: sidebar", async () => {
 });
 
 test("sidebar: Inbox should have icon", async () => {
+    const pyEnv = await startServer();
+    pyEnv["res.users"].write(serverState.userId, { notification_type: "inbox" });
     await start();
     await openDiscuss("mail.box_inbox");
     await contains("button", { text: "Inbox", contains: [".fa-inbox"] });
@@ -594,7 +597,7 @@ test("last discuss conversation is remembered", async () => {
     browser.localStorage.setItem(LAST_DISCUSS_ACTIVE_ID_LS, "discuss.channel_" + channelId);
     await start();
     await openDiscuss();
-    await contains("h1", { text: "Welcome to #General!" });
+    await contains("[role=\"heading\"]", { text: "Welcome to #General!" });
 });
 
 test("sidebar: default no conversation selected", async () => {
@@ -614,6 +617,8 @@ test("channel deletion fallbacks to no conversation selected", async () => {
 });
 
 test("sidebar: change active", async () => {
+    const pyEnv = await startServer();
+    pyEnv["res.users"].write(serverState.userId, { notification_type: "inbox" });
     await start();
     await openDiscuss("mail.box_inbox");
     await contains("button.o-active", { text: "Inbox" });
@@ -823,6 +828,7 @@ test("Unfollow message", async function () {
 
 test('messages marked as read move to "History" mailbox', async () => {
     const pyEnv = await startServer();
+    pyEnv["res.users"].write(serverState.userId, { notification_type: "inbox" });
     const channelId = pyEnv["discuss.channel"].create({ name: "other-disco" });
     const [messageId_1, messageId_2] = pyEnv["mail.message"].create([
         {
@@ -856,11 +862,11 @@ test('messages marked as read move to "History" mailbox', async () => {
     await contains(".o-mail-Thread h4", { text: "No history messages" });
     await click("button", { text: "Inbox" });
     await contains("button.o-active", { text: "Inbox" });
-    await contains(".o-mail-Thread h4", { count: 0, text: "Your inbox is empty" });
+    await contains(".o-mail-Thread h4", { count: 0, text: "Congratulations, your inbox is empty" });
     await contains(".o-mail-Thread .o-mail-Message", { count: 2 });
     await click("button", { text: "Mark all read" });
     await contains("button.o-active", { text: "Inbox" });
-    await contains(".o-mail-Thread h4", { text: "Your inbox is empty" });
+    await contains(".o-mail-Thread h4", { text: "Congratulations, your inbox is empty" });
     await click("button", { text: "History" });
     await contains("button.o-active", { text: "History" });
     await contains(".o-mail-Thread h4", { count: 0, text: "No history messages" });
@@ -869,6 +875,7 @@ test('messages marked as read move to "History" mailbox', async () => {
 
 test('mark a single message as read should only move this message to "History" mailbox', async () => {
     const pyEnv = await startServer();
+    pyEnv["res.users"].write(serverState.userId, { notification_type: "inbox" });
     const [messageId_1, messageId_2] = pyEnv["mail.message"].create([
         {
             body: "not empty 1",
@@ -911,6 +918,7 @@ test('mark a single message as read should only move this message to "History" m
 
 test('all messages in "Inbox" in "History" after marked all as read', async () => {
     const pyEnv = await startServer();
+    pyEnv["res.users"].write(serverState.userId, { notification_type: "inbox" });
     for (let i = 0; i < 40; i++) {
         const messageId = pyEnv["mail.message"].create({
             body: "not empty",
@@ -1051,6 +1059,7 @@ test("starred: unstar all", async () => {
 test.tags("focus required");
 test("auto-focus composer on opening thread", async () => {
     const pyEnv = await startServer();
+    pyEnv["res.users"].write(serverState.userId, { notification_type: "inbox" });
     const partnerId = pyEnv["res.partner"].create({ name: "Demo User" });
     pyEnv["discuss.channel"].create([
         { name: "General" },
@@ -1780,6 +1789,8 @@ test("Channel is added to discuss after invitation", async () => {
 });
 
 test("select another mailbox", async () => {
+    const pyEnv = await startServer();
+    pyEnv["res.users"].write(serverState.userId, { notification_type: "inbox" });
     patchUiSize({ size: SIZES.SM });
     await start();
     await openDiscuss();
@@ -1792,6 +1803,8 @@ test("select another mailbox", async () => {
 });
 
 test('auto-select "Inbox nav bar" when discuss had inbox as active thread', async () => {
+    const pyEnv = await startServer();
+    pyEnv["res.users"].write(serverState.userId, { notification_type: "inbox" });
     patchUiSize({ size: SIZES.SM });
     await start();
     await openDiscuss();
@@ -1799,7 +1812,7 @@ test('auto-select "Inbox nav bar" when discuss had inbox as active thread', asyn
     await contains(".o-mail-DiscussContent-threadName", { value: "Inbox" });
     await contains(".o-mail-MessagingMenu-navbar button.o-active", { text: "Inbox" });
     await contains("button.active.o-active", { text: "Inbox" });
-    await contains("h4", { text: "Your inbox is empty" });
+    await contains("h4", { text: "Congratulations, your inbox is empty" });
 });
 
 test("composer should be focused automatically after clicking on the send button", async () => {
