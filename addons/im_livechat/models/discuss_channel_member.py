@@ -156,10 +156,10 @@ class DiscussChannelMember(models.Model):
         if self.channel_id.channel_type == 'livechat':
             new_fields = [
                 "active",
-                "avatar_128",
                 Store.One("country_id", ["code", "name"]),
-                "im_status",
                 "is_public",
+                *self.env["res.partner"]._get_store_avatar_fields(),
+                *self.env["res.partner"]._get_store_im_status_fields(),
                 *self.env["res.partner"]._get_store_livechat_username_fields(),
             ]
             if self.livechat_member_type == "visitor":
@@ -171,11 +171,11 @@ class DiscussChannelMember(models.Model):
         self.ensure_one()
         if self.channel_id.channel_type == 'livechat':
             return [
-                "avatar_128",
                 Store.One("country_id", ["code", "name"]),
-                "im_status",
                 "name",
                 "offline_since",
+                *self.env["mail.guest"]._get_store_avatar_fields(),
+                *self.env["mail.guest"]._get_store_im_status_fields(),
             ]
         return super()._get_store_guest_fields(fields)
 
