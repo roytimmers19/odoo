@@ -477,13 +477,10 @@ export class PosOrder extends PosOrderAccounting {
         this.assertEditable();
         const existingCash = this.payment_ids.find((pl) => pl.payment_method_id.is_cash_count);
 
-        if (this.electronicPaymentInProgress()) {
-            return {
-                status: false,
-                data: _t("There is already an electronic payment in progress."),
-            };
+        const { status: canSend, message } = payment_method.getPaymentInterfaceStates();
+        if (!canSend) {
+            return { status: false, data: message };
         }
-
         if (existingCash && payment_method.is_cash_count) {
             return { status: false, data: _t("There is already a cash payment line.") };
         }
@@ -496,10 +493,7 @@ export class PosOrder extends PosOrderAccounting {
         this.selectPaymentline(newPaymentLine);
         newPaymentLine.setAmount(totalAmountDue);
 
-        if (
-            (payment_method.payment_terminal && !this.isRefund) ||
-            payment_method.payment_method_type === "qr_code"
-        ) {
+        if ((payment_method.payment_interface && !this.isRefund) || payment_method.useBankQrCode) {
             newPaymentLine.setPaymentStatus("pending");
         }
         return { status: true, data: newPaymentLine };
@@ -523,21 +517,7 @@ export class PosOrder extends PosOrderAccounting {
     }
 
     selectPaymentline(line) {
-        if (line) {
-            this.uiState.selected_paymentline_uuid = line?.uuid;
-        } else {
-            this.uiState.selected_paymentline_uuid = undefined;
-        }
-    }
-
-    electronicPaymentInProgress() {
-        return this.payment_ids.some(function (pl) {
-            if (pl.payment_status) {
-                return !["done", "reversed"].includes(pl.payment_status);
-            } else {
-                return false;
-            }
-        });
+        this.uiState.selected_paymentline_uuid = line?.uuid;
     }
 
     _getIgnoredProductIdsTotalDiscount() {
@@ -578,9 +558,7 @@ export class PosOrder extends PosOrderAccounting {
     isRefundInProcess() {
         return (
             this.isRefund &&
-            this.payment_ids.some(
-                (pl) => pl.payment_method_id.use_payment_terminal && pl.payment_status !== "done"
-            )
+            this.payment_ids.some((pl) => pl.payment_provider && pl.payment_status !== "done")
         );
     }
 
