@@ -6,8 +6,6 @@ import { _t } from "@web/core/l10n/translation";
 import { user } from "@web/core/user";
 import { Deferred } from "@web/core/utils/concurrency";
 
-/** @import { AwaitChatHubInit } from "@mail/core/common/chat_hub_model" */
-
 /**
  * @typedef SuggestedRecipient
  * @property {string} email
@@ -657,7 +655,9 @@ export class Thread extends Record {
     }
 
     /** @param {import("models").Message} message */
-    onNewSelfMessage(message) {}
+    onNewSelfMessage(message) {
+        this.channel?.onNewSelfMessage(message);
+    }
 
     /**
      * @param {Object} [options]
@@ -765,6 +765,10 @@ export class Thread extends Record {
             message_id: message.id,
             pinned,
         });
+    }
+
+    get shouldMarkAsReadOnFocus() {
+        return this.scrollTop === "bottom" && !this.scrollUnread && !this.channel?.markedAsUnread;
     }
 
     /**
