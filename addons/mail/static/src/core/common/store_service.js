@@ -12,7 +12,6 @@ import { Deferred, Mutex } from "@web/core/utils/concurrency";
 import { renderToElement } from "@web/core/utils/render";
 import { debounce } from "@web/core/utils/timing";
 import { session } from "@web/session";
-import { browser } from "@web/core/browser/browser";
 import { loader } from "@web/core/emoji_picker/emoji_picker";
 import { isMobileOS } from "@web/core/browser/feature_detection";
 import { getOrigin } from "@web/core/utils/urls";
@@ -88,25 +87,7 @@ export class Store extends BaseStore {
         },
     ];
 
-    isNotificationPermissionDismissed = fields.Attr(false, {
-        compute() {
-            return (
-                browser.localStorage.getItem("mail.user_setting.push_notification_dismissed") ===
-                "true"
-            );
-        },
-        /** @this {import("models").DiscussApp} */
-        onUpdate() {
-            if (this.isNotificationPermissionDismissed) {
-                browser.localStorage.setItem(
-                    "mail.user_setting.push_notification_dismissed",
-                    "true"
-                );
-            } else {
-                browser.localStorage.removeItem("mail.user_setting.push_notification_dismissed");
-            }
-        },
-    });
+    isNotificationPermissionDismissed = fields.Attr(false, { localStorage: true });
 
     messagePostMutex = new Mutex();
 
@@ -475,13 +456,11 @@ export class Store extends BaseStore {
         { mentionedChannels = [], mentionedPartners = [], mentionedRoles = [], thread } = {}
     ) {
         const validMentions = {};
-        validMentions.threads = mentionedChannels.filter((thread) => {
-            if (thread.channel?.parent_channel_id) {
-                return body.includes(
-                    `#${thread.channel.parent_channel_id.channel.fullNameWithParent}`
-                );
+        validMentions.channels = mentionedChannels.filter((channel) => {
+            if (channel.parent_channel_id) {
+                return body.includes(`#${channel.parent_channel_id.fullNameWithParent}`);
             }
-            return body.includes(`#${thread.channel?.displayName}`);
+            return body.includes(`#${channel.displayName}`);
         });
         validMentions.partners = mentionedPartners.filter((partner) =>
             body.includes(`@${thread?.getPersonaName(partner) ?? partner.name}`)
