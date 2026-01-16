@@ -356,6 +356,25 @@ class IrModel(models.Model):
             if model.state != 'manual':
                 raise UserError(_("Model “%s” contains module data and cannot be removed.", model.name))
 
+    @api.ondelete(at_uninstall=False)
+    def _unlink_related_attachments(self):
+        """ Delete attachment associated with the models being deleted. """
+        models = tuple(self.mapped('model'))
+
+        # Get files attached solely to the models being deleted (and none other)
+        fname_rows = self.env.execute_query(SQL(
+            "SELECT DISTINCT store_fname FROM ir_attachment WHERE res_model IN %s",
+            models,
+        ))
+
+        self.env.execute_query(SQL(
+            "DELETE FROM ir_attachment WHERE res_model IN %s",
+            models,
+        ))
+
+        for (fname,) in fname_rows:
+            self.env['ir.attachment']._file_delete(fname)
+
     def unlink(self):
         # prevent screwing up fields that depend on these models' fields
         manual_models = self.filtered(lambda model: model.state == 'manual')
@@ -522,7 +541,9 @@ class IrModelFields(models.Model):
                         help="The technical name of the model this field belongs to")
     relation = fields.Char(string='Related Model',
                            help="For relationship fields, the technical name of the target model")
-    relation_field = fields.Char(help="For one2many fields, the field on the target model that implement the opposite many2one relationship")
+    relation_field = fields.Char(help="For one2many fields, the field on the target model that implements the opposite many2one relationship")
+    relation_model_field = fields.Char(
+        help="For many2one_reference fields, the field that stores the technical name of the target model")
     relation_field_id = fields.Many2one('ir.model.fields', compute='_compute_relation_field_id',
                                         store=True, ondelete='cascade', string='Relation field')
     model_id = fields.Many2one('ir.model', string='Model', required=True, index=True, ondelete='cascade',
@@ -1183,6 +1204,7 @@ class IrModelFields(models.Model):
             'translate': translate,
             'company_dependent': bool(field.company_dependent),
             'relation_field': field.inverse_name if field.type == 'one2many' else None,
+            'relation_model_field': field.model_field if field.type == "many2one_reference" else None,
             'relation_table': field.relation if field.type == 'many2many' else None,
             'column1': field.column1 if field.type == 'many2many' else None,
             'column2': field.column2 if field.type == 'many2many' else None,
