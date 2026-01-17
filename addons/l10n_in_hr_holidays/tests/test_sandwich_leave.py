@@ -19,17 +19,14 @@ class TestSandwichLeave(TransactionCase):
             "company_id": self.indian_company.id,
             "attendance_ids": [
                 Command.create({
-                    "name": f"Day {day} {label}",
                     "dayofweek": str(day),
                     "hour_from": hour_from,
                     "hour_to": hour_to,
-                    "day_period": label.lower(),
                 })
                 for day in range(5)
-                for label, hour_from, hour_to in (
-                    ("Morning", 8, 12),
-                    ("Lunch", 12, 13),
-                    ("Afternoon", 13, 17),
+                for hour_from, hour_to in (
+                    (8, 12),
+                    (13, 17),
                 )
             ]},
         )
@@ -352,6 +349,77 @@ class TestSandwichLeave(TransactionCase):
         self.assertEqual(before_holiday_leave.number_of_hours, 8)
         self.assertTrue(after_holiday_leave.l10n_in_contains_sandwich_leaves)
         self.assertEqual(after_holiday_leave.number_of_hours, 24)
+
+    @freeze_time('2025-12-10')
+    def test_sandwich_for_half_day_spanning_weekend_without_fullday(self):
+        """
+            --working days: 12th and 15th December
+            --non-working days: 13th, 14th December
+        """
+        holiday_leave = self.env['hr.leave'].create({
+            'name': 'Test Leave',
+            'employee_id': self.rahul_emp.id,
+            'holiday_status_id': self.leave_type_half_day.id,
+            'request_date_from': "2025-12-12",
+            'request_date_to': "2025-12-15",
+            'request_date_from_period': 'pm',
+            'request_date_to_period': 'am',
+        })
+        self.assertFalse(holiday_leave.l10n_in_contains_sandwich_leaves)
+        self.assertEqual(holiday_leave.number_of_days, 1)
+
+    @freeze_time('2025-12-10')
+    def test_sandwich_for_half_day_spanning_weekend(self):
+        """
+            --working days: 12th and 15th December
+            --non-working days: 13th, 14th December
+        """
+        holiday_leave = self.env['hr.leave'].create({
+            'name': 'Test Leave',
+            'employee_id': self.rahul_emp.id,
+            'holiday_status_id': self.leave_type_half_day.id,
+            'request_date_from': "2025-12-12",
+            'request_date_to': "2025-12-15",
+            'request_date_from_period': 'am',
+            'request_date_to_period': 'pm',
+        })
+        self.assertTrue(holiday_leave.l10n_in_contains_sandwich_leaves)
+        self.assertEqual(holiday_leave.number_of_days, 4)
+
+    @freeze_time('2025-12-10')
+    def test_sandwich_for_half_day_full_then_partial(self):
+        """
+            --working days: 12th and 15th December
+            --non-working days: 13th, 14th December
+        """
+        before_holiday_leave = self.env['hr.leave'].create({
+            'name': 'Test Leave',
+            'employee_id': self.rahul_emp.id,
+            'holiday_status_id': self.leave_type_half_day.id,
+            'request_date_from': "2025-12-12",
+            'request_date_to': "2025-12-12",
+            'request_date_from_period': 'am',
+            'request_date_to_period': 'pm',
+        })
+        after_holiday_leave = self.env['hr.leave'].create({
+            'name': 'Test Leave',
+            'employee_id': self.rahul_emp.id,
+            'holiday_status_id': self.leave_type_half_day.id,
+            'request_date_from': "2025-12-15",
+            'request_date_to': "2025-12-15",
+            'request_date_from_period': 'am',
+            'request_date_to_period': 'pm',
+        })
+        self.assertFalse(before_holiday_leave.l10n_in_contains_sandwich_leaves)
+        self.assertTrue(after_holiday_leave.l10n_in_contains_sandwich_leaves)
+        self.assertEqual(after_holiday_leave.number_of_days, 3)
+
+        after_holiday_leave.write({
+            'request_date_from_period': 'pm',
+            'request_date_to_period': 'pm',
+        })
+        self.assertEqual(after_holiday_leave.number_of_days, 0.5)
+        self.assertFalse(after_holiday_leave.l10n_in_contains_sandwich_leaves)
 
     @freeze_time('2025-01-15')
     def test_sandwich_for_two_different_leave_type(self):
