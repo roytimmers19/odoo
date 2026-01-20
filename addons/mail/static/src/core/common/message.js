@@ -467,6 +467,13 @@ export class Message extends Component {
             // Mobile OS long press is handled with useLongPress()
             return;
         }
+        if (ev.target.tagName === "A") {
+            return;
+        }
+        this.showRightClickMessageActions(ev);
+    }
+
+    showRightClickMessageActions(ev) {
         const el = this.rightClickAnchor.el;
         el.style.left = ev.clientX + "px";
         el.style.top = ev.clientY + "px";
@@ -529,10 +536,9 @@ export class Message extends Component {
     }
 
     openReactionMenu(reaction) {
-        const message = toRaw(this.props.message);
         this.dialog.add(
             MessageReactionMenu,
-            { message, initialReaction: reaction },
+            { message: this.props.message, initialReaction: reaction },
             { context: this }
         );
     }

@@ -1375,6 +1375,9 @@ class TestUi(TestPointOfSaleHttpCommon):
         order = self.env['pos.order'].search([])
         self.assertTrue(order[0].name == order[1].name + " REFUND")
 
+    def test_customer_display_popup(self):
+        self.start_tour("/pos/ui?config_id=%d" % self.main_pos_config.id, 'customer_display_shows_qr_popup', login="pos_user")
+
     def test_lot_refund(self):
 
         self.product1 = self.env['product.product'].create({
@@ -2470,10 +2473,21 @@ class TestUi(TestPointOfSaleHttpCommon):
     def test_product_long_press(self):
         """ Test the long press on product to open the product info """
         archive_products(self.env)
+        group_tax = self.env['account.tax'].create({
+            'name': 'Parent Tax',
+            'amount_type': 'group',
+            'children_tax_ids': [(0, 0, {
+                'name': 'Child Tax 1',
+                'amount': 10,
+            }), (0, 0, {
+                'name': 'Child Tax 2',
+                'amount': 5,
+            })],
+        })
         self.env['product.product'].create({
             'name': 'Test Product',
             'list_price': 100,
-            'taxes_id': False,
+            'taxes_id': [(6, 0, [group_tax.id])],
             'available_in_pos': True,
         })
         self.main_pos_config.with_user(self.pos_user).open_ui()
@@ -3753,6 +3767,10 @@ class MobileTestUi(TestUi):
     browser_size = '375x667'
     touch_enabled = True
     allow_inherited_tests_method = True
+
+    # Skip customer display web tests on mobile
+    def test_customer_display_popup(self):
+        return
 
 
 class TestTaxCommonPOS(TestPointOfSaleHttpCommon, TestTaxCommon):

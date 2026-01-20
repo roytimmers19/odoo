@@ -172,7 +172,7 @@ export class DiscussChannel extends Record {
     });
     /** @returns {import("models").ChannelMember} */
     computeCorrespondent() {
-        if (this.channel_type === "channel") {
+        if (["channel", "group"].includes(this.channel_type)) {
             return undefined;
         }
         const correspondents = this.correspondents;
@@ -433,10 +433,7 @@ export class DiscussChannel extends Record {
         return false;
     }
     get showImStatus() {
-        return (
-            (this.channel_type === "chat" && this.correspondent) ||
-            (this.channel_type === "group" && this.hasOtherMembersTyping)
-        );
+        return this.channel_type === "chat" && this.correspondent;
     }
     get showUnreadBanner() {
         return this.self_member_id?.message_unread_counter_ui > 0;
