@@ -136,6 +136,7 @@ class TestUblExportBis3BE(TestUblBis3Common, TestUblCiiBECommon):
         """ Ensure the recycling contribution taxes are turned into allowance/charges at the document line level. """
         tax_recupel = self.fixed_tax(1.0, name="RECUPEL", include_base_amount=True)
         tax_auvibel = self.fixed_tax(2.0, name="AUVIBEL", include_base_amount=True)
+        tax_bebat = self.fixed_tax(3.0, name="BEBAT", include_base_amount=True)
         tax_21 = self.percent_tax(21.0)
         invoice = self._create_invoice(
             partner_id=self.partner_be,
@@ -151,6 +152,11 @@ class TestUblExportBis3BE(TestUblBis3Common, TestUblCiiBECommon):
                     quantity=4.0,
                     discount=25.0,
                     tax_ids=tax_auvibel + tax_21,
+                ),
+                self._prepare_invoice_line(
+                    product_id=self.product_a,
+                    price_unit=97.0,
+                    tax_ids=tax_bebat + tax_21,
                 ),
             ],
             post=True,
@@ -400,9 +406,9 @@ class TestUblExportBis3BE(TestUblBis3Common, TestUblCiiBECommon):
         self._generate_invoice_ubl_file(invoice)
         self._assert_invoice_ubl_file(invoice, 'test_invoice_sent_to_luxembourg_dig')
 
-    def test_export_gln(self):
-        """ GLN was added in a fixup module account_add_gln. """
+    def test_invoice_sent_to_partner_with_gln(self):
         self.partner_be.global_location_number = "222222222222"
+
         tax_21 = self.percent_tax(21.0)
         product = self._create_product(
             lst_price=100.0,
@@ -415,7 +421,7 @@ class TestUblExportBis3BE(TestUblBis3Common, TestUblCiiBECommon):
         )
 
         self._generate_invoice_ubl_file(invoice)
-        self._assert_invoice_ubl_file(invoice, 'test_invoice_with_gln')
+        self._assert_invoice_ubl_file(invoice, 'test_invoice_sent_to_partner_with_gln')
 
     def test_invoice_send_and_print_additional_documents(self):
         """ Ensure an additional document is added to the UBL under AdditionalDocumentReference. """
