@@ -68,7 +68,7 @@ from odoo.modules.registry import Registry
 from odoo.sql_db import Cursor, Savepoint
 from odoo.tools import SQL, DotDict, config, float_compare, mute_logger, profiler
 from odoo.tools.mail import single_email_re
-from odoo.tools.misc import find_in_path, lower_logging
+from odoo.tools.misc import diff_zip, find_in_path, lower_logging
 from odoo.tools.xml_utils import _validate_xml
 
 import odoo.addons.base
@@ -604,7 +604,9 @@ class BaseCase(case.TestCase):
     def assertQueries(self, expected, flush=True):
         """ Check the queries made by the current cursor. ``expected`` is a list
         of strings representing the expected queries being made. Query strings
-        are matched against each other, ignoring case and whitespaces.
+        are matched against each other, ignoring case and whitespaces. Moreover,
+        the substring ``"..."`` can be used as a wildcard to match anything in
+        the corresponding actual query.
         """
         actual_queries = []
 
@@ -613,44 +615,19 @@ class BaseCase(case.TestCase):
         if not self.warm:
             return
 
-        self.assertEqual(
-            len(actual_queries), len(expected),
-            "\n---- actual queries:\n%s\n---- expected queries:\n%s" % (
-                "\n".join(actual_queries), "\n".join(expected),
-            )
-        )
-        for actual_query, expect_query in zip(actual_queries, expected):
-            self.assertEqual(
-                "".join(actual_query.lower().split()),
-                "".join(expect_query.lower().split()),
-                "\n---- actual query:\n%s\n---- not like:\n%s" % (actual_query, expect_query),
-            )
-
-    @contextmanager
-    def assertQueriesContain(self, expected, flush=True):
-        """ Check the queries made by the current cursor. ``expected`` is a list
-        of strings representing the expected queries being made. Query strings
-        are matched against each other, ignoring case and whitespaces.
-        """
-        actual_queries = []
-
-        yield from self._patchExecute(actual_queries, flush)
-
-        if not self.warm:
+        # diff lists of queries 'expected' and 'actual_queries'
+        queries1 = [QueryLike(query) for query in expected]
+        queries2 = [QueryLike(query) for query in actual_queries]
+        if queries1 == queries2:
             return
 
-        self.assertEqual(
-            len(actual_queries), len(expected),
-            "\n---- actual queries:\n%s\n---- expected queries:\n%s" % (
-                "\n".join(actual_queries), "\n".join(expected),
-            )
+        diff = "\n".join(
+            (f"--- {query1}" if query2 is None else
+             f"+++ {query2}" if query1 is None else
+             f"=== {query2}")
+            for query1, query2 in diff_zip(queries1, queries2)
         )
-        for actual_query, expect_query in zip(actual_queries, expected):
-            self.assertIn(
-                "".join(expect_query.lower().split()),
-                "".join(actual_query.lower().split()),
-                "\n---- actual query:\n%s\n---- doesn't contain:\n%s" % (actual_query, expect_query),
-            )
+        self.fail(self._formatMessage("\n" + diff, "Not the expected queries"))
 
     @contextmanager
     def assertQueryCount(self, default=0, flush=True, **counters):
@@ -1009,6 +986,28 @@ class Like:
 
     def __repr__(self):
         return repr(self.pattern)
+
+
+class QueryLike(str):
+    """ Wrapper for comparing query strings. The comparison ignores case and
+    spaces, and the substring ``"..."`` can match anything on the right-hand
+    side of operator `==`.
+    """
+    __slots__ = ('_regex', '_stripped')
+
+    def __init__(self, value):
+        # ignore case and spaces when comparing
+        self._stripped = "".join(value.lower().split())
+        # "..." matches anything
+        self._regex = ".*".join(re.escape(part) for part in self._stripped.split('...'))
+
+    def __hash__(self):
+        return hash(self._stripped)
+
+    def __eq__(self, other):
+        if not isinstance(other, QueryLike):
+            return NotImplemented
+        return re.fullmatch(self._regex, other._stripped, re.DOTALL)
 
 
 class WhitespaceInsensitive(str):

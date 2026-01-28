@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta
 from dateutil.relativedelta import MO, relativedelta
 
 from odoo import api, fields, models, _
-from odoo.exceptions import AccessError, MissingError
+from odoo.exceptions import AccessError
 from odoo.fields import Domain
 from odoo.tools import is_html_empty
 from odoo.tools.misc import clean_context, get_lang, groupby
@@ -243,19 +243,9 @@ class MailActivity(models.Model):
                 forbidden_ids.append(activity.id)
 
         for doc_model, docid_actids in model_docid_actids.items():
-            documents = self.env[doc_model].browse(docid_actids)
-            doc_operation = getattr(
-                documents, '_mail_post_access', 'read' if operation == 'read' else 'write'
-            )
-            try:
-                doc_result = documents._check_access(doc_operation)
-            except MissingError:
-                existing = documents.exists()
-                forbidden_ids.extend((documents - existing).ids)
-                doc_result = existing._check_access(doc_operation)
-            if doc_result:
-                for document in doc_result[0]:
-                    forbidden_ids.extend(docid_actids[document.id])
+            allowed = self.env['mail.message']._filter_records_for_message_operation(doc_model, docid_actids, operation)
+            for document_id in [doc_id for doc_id in docid_actids if doc_id not in allowed.ids]:
+                forbidden_ids.extend(docid_actids[document_id])
 
         if forbidden_ids:
             forbidden = self.browse(forbidden_ids)
@@ -558,6 +548,7 @@ class MailActivity(models.Model):
         # marking as 'done'
         messages = self.env['mail.message']
         next_activities_values = []
+        ongoing_activities = self.filtered(lambda a: not a.date_done)
 
         # Search for all attachments linked to the activities we are about to archive. This way, we
         # can link them to the message posted and prevent their disparition. The move is done in
@@ -569,7 +560,7 @@ class MailActivity(models.Model):
         attachments_to_remove = self.env['ir.attachment']
         activities_to_remove = self.browse()
 
-        for model, activity_data in self.filtered('res_model')._classify_by_model().items():
+        for model, activity_data in ongoing_activities.filtered('res_model')._classify_by_model().items():
             # Allow user without access to the record to "mark as done" activities assigned to them. At the end of the
             # method, the activity is archived which ensure the user has enough right on the activities.
             records_sudo = self.env[model].sudo().browse(activity_data['record_ids'])
