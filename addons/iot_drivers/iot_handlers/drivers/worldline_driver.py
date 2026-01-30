@@ -1,7 +1,6 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 import ctypes
-import datetime
 import logging
 
 from odoo.addons.iot_drivers.tools.system import IS_RPI
@@ -19,8 +18,7 @@ class WorldlineDriver(CtypesTerminalDriver):
     connection_type = 'ctep'
 
     def __init__(self, identifier, device):
-        lib_name = "libeasyctep.so" if IS_RPI else "libeasyctep.dll"
-        super().__init__(identifier, device, lib_name=lib_name, manufacturer="Worldline")
+        super().__init__(identifier, device, manufacturer="Worldline")
 
         # int startTransaction(
         self.terminal.startTransaction.argtypes = [
@@ -52,7 +50,7 @@ class WorldlineDriver(CtypesTerminalDriver):
         _logger.info('start transaction #%d amount: %f action_identifier: %d', transaction_id, transaction_amount, transaction_action_identifier)
 
         try:
-            device = ctypes.byref(self.dev) if IS_RPI else ctypes.cast(self.dev, ctypes.c_void_p)
+            device = ctypes.byref(self.manager) if IS_RPI else ctypes.cast(self.manager, ctypes.c_void_p)
             result = self.terminal.startTransaction(
                 device,  # std::shared_ptr<ect::CTEPTerminal> trm if IS_RPI else CTEPManager* manager
                 ctypes.c_char_p(str(transaction_amount).encode('utf-8')),  # char const* amount
@@ -63,7 +61,6 @@ class WorldlineDriver(CtypesTerminalDriver):
                 card,  # char* card
                 error_code,  # char* error
             )
-            self.next_transaction_min_dt = datetime.datetime.now() + datetime.timedelta(seconds=self.DELAY_TIME_BETWEEN_TRANSACTIONS)
 
             if result == 1:
                 # Transaction successful
@@ -85,7 +82,7 @@ class WorldlineDriver(CtypesTerminalDriver):
                     return self.send_status(error=error_msg, request_data=transaction)
                 # Transaction was cancelled
                 else:
-                    _logger.info("transaction #%d cancelled by PoS user", transaction_id)
+                    _logger.info("transaction #%d cancelled by Odoo user", transaction_id)
                     return self.send_status(stage='Cancel', request_data=transaction)
             elif result == -1:
                 # Terminal disconnection, check status manually
@@ -101,14 +98,15 @@ class WorldlineDriver(CtypesTerminalDriver):
             )
 
     def cancel_transaction(self, transaction):
-        # Force to wait before starting the transaction if necessary
-        self._check_transaction_delay()
-        self.send_status(stage='waitingCancel', request_data=transaction)
+        # Ignore cancel request if no transaction is running
+        if self.data['result']['Stage'] != 'WaitingForCard':
+            _logger.warning("Cancel request ignored because no transaction is running to avoid crashes")
+            return
 
         error_code = create_ctypes_string_buffer()
         _logger.info("cancel transaction request for: %s", transaction)
         try:
-            device = ctypes.byref(self.dev) if IS_RPI else ctypes.cast(self.dev, ctypes.c_void_p)
+            device = ctypes.byref(self.manager) if IS_RPI else ctypes.cast(self.manager, ctypes.c_void_p)
             result = self.terminal.abortTransaction(device, error_code)
             _logger.debug("end cancel transaction request")
 

@@ -1,7 +1,6 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 import ctypes
-import datetime
 import logging
 from abc import abstractmethod, ABC
 from queue import Queue
@@ -10,8 +9,7 @@ from time import sleep
 
 from odoo.addons.iot_drivers.driver import Driver
 from odoo.addons.iot_drivers.event_manager import event_manager
-from odoo.addons.iot_drivers.tools.system import IS_WINDOWS
-from odoo.tools.misc import file_path
+from odoo.addons.iot_drivers.tools.system import IS_WINDOWS, path_file
 
 _logger = logging.getLogger(__name__)
 
@@ -121,19 +119,14 @@ def import_ctypes_library(lib_subfolder: str, lib_name: str):
     extension (.so/.dll), otherwise ValueError will be raised
     :return: The imported ctypes library object, or None if import failed
     """
-    supported_lib_extensions = '.dll' if IS_WINDOWS else '.so'
-    import_library_method = ctypes.WinDLL if IS_WINDOWS else ctypes.CDLL
-
+    import_library = ctypes.WinDLL if IS_WINDOWS else ctypes.CDLL
+    lib_path = path_file("odoo/addons/iot_drivers/iot_handlers/drivers", lib_subfolder, lib_name)
     try:
-        lib_path = file_path(f'iot_drivers/iot_handlers/drivers/{lib_subfolder}/{lib_name}', supported_lib_extensions)
-        ctypes_lib = import_library_method(lib_path)
-        _logger.info('Successfully imported ctypes library "%s" from %s', lib_name, lib_path)
+        ctypes_lib = import_library(lib_path)
+        _logger.info("Successfully imported ctypes library '%s'", lib_path)
         return ctypes_lib
     except (OSError, ValueError, FileNotFoundError):
-        _logger.exception(
-            "Failed to import ctypes library '%s' from iot_drivers/iot_handlers/drivers/%s/",
-            lib_name, lib_subfolder
-        )
+        _logger.exception("Failed to import ctypes library '%s'", lib_path)
 
 
 def create_ctypes_string_buffer():
@@ -149,7 +142,7 @@ class CtypesTerminalDriver(Driver, ABC):
 
     DELAY_TIME_BETWEEN_TRANSACTIONS = 5  # seconds
 
-    def __init__(self, identifier, device, lib_name: str, manufacturer: str):
+    def __init__(self, identifier, device, manufacturer: str):
         super().__init__(identifier, device)
         self.device_type = 'payment'
         self.device_connection = 'network'
@@ -159,11 +152,11 @@ class CtypesTerminalDriver(Driver, ABC):
         self.terminal_busy = False
 
         self._actions[''] = self._action_default
-        self.next_transaction_min_dt = datetime.datetime.min
 
         self.device_manufacturer = manufacturer
         self.device_name = f"{self.device_manufacturer} terminal {self.device_identifier}"
-        self.terminal = import_ctypes_library(self.connection_type, lib_name)
+        self.terminal = device["terminal"]
+        self.manager = device["manager"]
 
     @classmethod
     def supported(cls, device):
@@ -193,18 +186,6 @@ class CtypesTerminalDriver(Driver, ABC):
             elif action_type == 'Balance':
                 self.six_terminal_balance(action)  # Only for Worldline "Six" (TIM)
             self.terminal_busy = False
-
-    def _check_transaction_delay(self):
-        # After a payment has been processed, the display on the terminal still shows some
-        # information for about 4-5 seconds. No request can be processed during this period.
-        delay_diff = (self.next_transaction_min_dt - datetime.datetime.now()).total_seconds()
-        if delay_diff > 0:
-            if delay_diff > self.DELAY_TIME_BETWEEN_TRANSACTIONS:
-                # Theoretically not possible, but to avoid sleeping for ages, we cap the value
-                _logger.warning('%s: Transaction delay difference is too high %.2f force set as default', self.device_name, delay_diff)
-                delay_diff = self.DELAY_TIME_BETWEEN_TRANSACTIONS
-            _logger.info('%s: Previous transaction is too recent, will sleep for %.2f seconds', self.device_name, delay_diff)
-            sleep(delay_diff)
 
     def send_status(self, value='', response=False, stage=False, ticket=False, ticket_merchant=False, card=False, card_no=False, transaction_id=False, error=False, disconnected=False, request_data=False):
         self.data['status'] = 'success'  # always success: let service handle errors
@@ -241,7 +222,6 @@ class CtypesTerminalDriver(Driver, ABC):
             )
             return False
 
-        self._check_transaction_delay()  # Force wait before starting transaction if necessary
         self.send_status(stage='WaitingForCard', request_data=transaction)
         return True
 
@@ -256,3 +236,21 @@ class CtypesTerminalDriver(Driver, ABC):
         Method implementing the terminal balance request (only for Worldline "Six")
         Not an abstract method as it remains undefined for Worldline
         """
+
+    def status(self, _):
+        self._action_default({
+            "messageType": "Transaction",
+            "transactionType": "Payment",
+            "TransactionID": 1,
+            "actionIdentifier": 1,
+            "amount": 1,
+            "cid": 1,
+            "posId": 1,
+            "userId": 1,
+            "currency": "EUR",
+        })
+        sleep(1)
+        self._action_default({
+            "messageType": "Cancel",
+            "cid": 2,
+        })
