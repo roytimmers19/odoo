@@ -332,7 +332,12 @@ export class Form extends Interaction {
         }
 
         const formFields = [];
+        // List of placeholder values to ignore for submission
+        const valuesToIgnore = ["_other"];
         new FormData(this.el).forEach((value, key) => {
+            if (valuesToIgnore.includes(value)) {
+                return;
+            }
             const inputElement = this.el.querySelector(`[name="${CSS.escape(key)}"]`);
             if (inputElement && inputElement.type !== "file") {
                 formFields.push({ name: key, value: value });
@@ -545,6 +550,7 @@ export class Form extends Interaction {
 
     checkErrorFields(errorFields) {
         let formValid = true;
+        let firstInvalidInput = null;
         // Loop on all fields
         for (const fieldEl of this.el.querySelectorAll(".form-field, .s_website_form_field")) {
             // !compatibility
@@ -639,8 +645,16 @@ export class Form extends Interaction {
                     });
                     popover.show();
                 }
+                if (!firstInvalidInput) {
+                    firstInvalidInput = invalidInputs[0] || controlEls[0];
+                }
                 formValid = false;
             }
+        }
+        // Highlight the first invalid field
+        if (firstInvalidInput) {
+            firstInvalidInput.focus();
+            firstInvalidInput.scrollIntoView({ behavior: "smooth", block: "center" });
         }
         return formValid;
     }
