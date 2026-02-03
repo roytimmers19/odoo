@@ -1,4 +1,4 @@
-import { Component, xml } from "@odoo/owl";
+import { Component, useState, xml } from "@odoo/owl";
 import { browser } from "@web/core/browser/browser";
 import { rpc } from "@web/core/network/rpc";
 
@@ -147,6 +147,45 @@ test("offlineUI: don't disable already disabled elements", async () => {
     expect(`.checkbox`).toHaveAttribute("disabled");
 });
 
+test("offlineUI: react to [data-available-offline] attribute changes", async () => {
+    let state;
+    class Root extends Component {
+        static template = xml`
+            <div>
+                <button type="button" class="btn1" t-att="{ 'data-available-offline': state.btn1Available }">
+                    First
+                </button>
+                <button type="button" class="btn2" t-att="{ 'data-available-offline': state.btn2Available }">
+                    Second
+                </button>
+            </div>
+        `;
+        static props = ["*"];
+
+        setup() {
+            this.state = useState({
+                btn1Available: true,
+                btn2Available: false,
+            });
+            state = this.state;
+        }
+    }
+
+    await mountWithCleanup(Root);
+    expect(".btn1").not.toHaveAttribute("disabled");
+    expect(".btn2").not.toHaveAttribute("disabled");
+
+    getService("offline").offline = true;
+    expect(".btn1").not.toHaveAttribute("disabled");
+    expect(".btn2").toHaveAttribute("disabled");
+
+    state.btn1Available = false;
+    state.btn2Available = true;
+    await animationFrame();
+    expect(".btn1").toHaveAttribute("disabled");
+    expect(".btn2").not.toHaveAttribute("disabled");
+});
+
 test("Repeatedly check connection when going offline", async () => {
     patchWithCleanup(Math, {
         random: () => 1, // no jitter
@@ -177,4 +216,75 @@ test("Repeatedly check connection when going offline", async () => {
     await advanceTime(3500); // second version_info check
     expect(env.services.offline.offline).toBe(false);
     expect.verifySteps(["version_info", "version_info"]);
+});
+
+test("isAvailableOffline", async () => {
+    const env = await makeMockEnv();
+    expect(env.services.offline.offline).toBe(false);
+
+    await env.services.offline.setAvailableOffline(1, "list", { search: { key: 1 } });
+    await env.services.offline.setAvailableOffline(1, "form", { resId: 1 });
+
+    // go offline
+    env.services.offline.offline = true;
+    await tick();
+    expect(env.services.offline.offline).toBe(true);
+
+    expect(env.services.offline.isAvailableOffline(1)).toBe(true);
+    expect(env.services.offline.isAvailableOffline(4)).toBe(false);
+
+    expect(env.services.offline.isAvailableOffline(1, "list")).toBe(true);
+    expect(env.services.offline.isAvailableOffline(1, "kanban")).toBe(false);
+
+    expect(env.services.offline.isAvailableOffline(1, "list", 1)).toBe(true);
+    expect(env.services.offline.isAvailableOffline(1, "kanban", 3)).toBe(false);
+});
+
+test("getAvailableSearches", async () => {
+    const env = await makeMockEnv();
+    const offline = env.services.offline;
+    expect(offline.offline).toBe(false);
+
+    await offline.setAvailableOffline(1, "list", { search: { key: "1" } });
+    await offline.setAvailableOffline(1, "list", { search: { key: "2" } });
+    await offline.setAvailableOffline(1, "kanban", { search: { key: "oui" } });
+    await offline.setAvailableOffline(2, "kanban", { search: { key: "8" } });
+
+    // go offline
+    offline.offline = true;
+    await tick();
+    expect(offline.offline).toBe(true);
+
+    expect(await offline.getAvailableSearches(1, "list")).toEqual([{ key: "2" }, { key: "1" }]);
+    expect(await offline.getAvailableSearches(1, "kanban")).toEqual([{ key: "oui" }]);
+    expect(await offline.getAvailableSearches(2, "kanban")).toEqual([{ key: "8" }]);
+});
+
+test("getAvailableSearches (searches order)", async () => {
+    const env = await makeMockEnv();
+    const offline = env.services.offline;
+    expect(offline.offline).toBe(false);
+
+    await offline.setAvailableOffline(1, "list", { search: { key: "1" } });
+    await offline.setAvailableOffline(1, "list", { search: { key: "2" } });
+    await offline.setAvailableOffline(1, "list", { search: { key: "2" } });
+    await offline.setAvailableOffline(1, "list", { search: { key: "1" } });
+    await offline.setAvailableOffline(1, "list", { search: { key: "3" } });
+    await offline.setAvailableOffline(1, "list", { search: { key: "1" } });
+    await offline.setAvailableOffline(1, "list", { search: { key: "4" } });
+    await offline.setAvailableOffline(1, "list", { search: { key: "3" } });
+    await offline.setAvailableOffline(1, "list", { search: { key: "5" } });
+
+    // go offline
+    offline.offline = true;
+    await tick();
+    expect(offline.offline).toBe(true);
+
+    expect(await offline.getAvailableSearches(1, "list")).toEqual([
+        { key: "1" }, // accessed 3 times
+        { key: "3" }, // accessed twice
+        { key: "2" }, // accessed twice (less recently)
+        { key: "5" }, // accessed once
+        { key: "4" }, // accessed once (less recently)
+    ]);
 });

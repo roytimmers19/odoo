@@ -629,13 +629,6 @@ class AccountMove(models.Model):
     reversal_move_ids = fields.One2many('account.move', 'reversed_entry_id')
 
     # === Vendor bill fields === #
-    invoice_vendor_bill_id = fields.Many2one(
-        'account.move',
-        store=False,
-        check_company=True,
-        string='Vendor Bill',
-        help="Auto-complete from a previous bill or refund.",
-    )
     invoice_source_email = fields.Char(string='Source Email', tracking=True)
     invoice_partner_display_name = fields.Char(compute='_compute_invoice_partner_display_info', store=True)
     is_manually_modified = fields.Boolean()
@@ -922,8 +915,7 @@ class AccountMove(models.Model):
     @api.depends('move_type')
     def _compute_is_storno(self):
         for move in self:
-            is_refund = move.move_type in ('out_refund', 'in_refund')
-            move.is_storno = move.is_storno or (is_refund and move.company_id.account_storno)
+            move.is_storno = move.is_storno or (move.is_refund() and move.company_id.account_storno)
 
     @api.depends('company_id', 'invoice_filter_type_domain')
     def _compute_suitable_journal_ids(self):
@@ -1477,7 +1469,7 @@ class AccountMove(models.Model):
                     continue
 
                 payments_widget_vals['content'].append({
-                    'move_name': line.ref or line.move_id.name,
+                    'move_name': line.move_id.name,
                     'amount': amount,
                     'currency_id': move.currency_id.id,
                     'id': line.id,
@@ -1534,7 +1526,7 @@ class AccountMove(models.Model):
                         'account_payment_id': counterpart_line.payment_id.id,
                         'payment_method_name': counterpart_line.payment_id.payment_method_line_id.name,
                         'move_id': counterpart_line.move_id.id,
-                        'is_refund': counterpart_line.move_id.move_type in ['in_refund', 'out_refund'],
+                        'is_refund': counterpart_line.move_id.is_refund(),
                         'ref': reconciliation_ref,
                         # these are necessary for the views to change depending on the values
                         'is_exchange': reconciled_partial['is_exchange'],
@@ -1592,7 +1584,7 @@ class AccountMove(models.Model):
             special_mode='total_excluded',
             special_type='early_payment',
 
-            is_refund=self.move_type in ('out_refund', 'in_refund'),
+            is_refund=self.is_refund(),
             rate=rate,
         )
 
@@ -1624,7 +1616,7 @@ class AccountMove(models.Model):
 
                 partner_id=self.commercial_partner_id,
                 account_id=self.env['account.account'].browse(all_values['account_id']),
-                is_refund=self.move_type in ('out_refund', 'in_refund'),
+                is_refund=self.is_refund(),
                 rate=rate,
             ))
         return epd_lines
@@ -1647,7 +1639,7 @@ class AccountMove(models.Model):
             special_mode='total_excluded',
             special_type='cash_rounding',
 
-            is_refund=self.move_type in ('out_refund', 'in_refund'),
+            is_refund=self.is_refund(),
             rate=rate,
         )
 
@@ -1680,7 +1672,7 @@ class AccountMove(models.Model):
             special_mode='total_excluded',
             special_type='non_deductible',
 
-            is_refund=self.move_type in ('out_refund', 'in_refund'),
+            is_refund=self.is_refund(),
             rate=rate,
         )
 
@@ -2037,12 +2029,15 @@ class AccountMove(models.Model):
         for move in self:
             move.quick_encoding_vals = move._get_quick_edit_suggestions()
 
-    @api.depends('ref', 'move_type', 'partner_id', 'invoice_date', 'tax_totals')
+    @api.depends(lambda self: self._duplicated_ref_ids_depends())
     def _compute_duplicated_ref_ids(self):
         move_to_duplicate_move = self._fetch_duplicate_reference()
         for move in self:
             # Uses move._origin.id to handle records in edition/existing records and 0 for new records
             move.duplicated_ref_ids = move_to_duplicate_move.get(move._origin, self.env['account.move'])
+
+    def _duplicated_ref_ids_depends(self):
+        return ["ref", "move_type", "partner_id", "invoice_date", "tax_totals"]
 
     def _fetch_duplicate_reference(self, matching_states=('draft', 'posted')):
         moves = self.filtered(lambda m: m.is_sale_document() or m.is_purchase_document())
@@ -2050,7 +2045,7 @@ class AccountMove(models.Model):
         if not moves:
             return {}
 
-        used_fields = ("company_id", "partner_id", "commercial_partner_id", "ref", "move_type", "invoice_date", "state", "amount_total")
+        used_fields = [f for f in self._duplicated_ref_ids_depends() if self._fields[f].store] + ["commercial_partner_id", "company_id", "amount_total", "state"]
 
         self.env["account.move"].flush_model(used_fields)
 
@@ -2073,9 +2068,37 @@ class AccountMove(models.Model):
                     for field_name, value in values.items()
                 )
                 all_values.append(SQL("(%s)", casted_values))
-            column_names = SQL(', ').join(SQL.identifier(field_name) for field_name in used_fields + ("id",))
+            column_names = SQL(', ').join(SQL.identifier(field_name) for field_name in used_fields + ["id"])
             move_table_and_alias = SQL("(VALUES %s) AS move(%s)", SQL(', ').join(all_values), column_names)
 
+        to_query = self._get_duplicate_ref_sql_conditions(moves, move_table_and_alias)
+
+        result = []
+        for moves, move_type_sql_condition in to_query:
+            result.extend(self.env.execute_query(SQL("""
+                SELECT move.id AS move_id,
+                       array_agg(duplicate_move.id) AS duplicate_ids
+                  FROM %(move_table_and_alias)s
+                  JOIN account_move AS duplicate_move
+                    ON move.company_id = duplicate_move.company_id
+                   AND move.id != duplicate_move.id
+                   AND duplicate_move.state IN %(matching_states)s
+                   AND move.move_type = duplicate_move.move_type
+                   AND (%(move_type_sql_condition)s)
+                 WHERE move.id IN %(moves)s
+                 GROUP BY move.id
+                """,
+                matching_states=tuple(matching_states),
+                moves=tuple(moves.ids or [0]),
+                move_table_and_alias=move_table_and_alias,
+                move_type_sql_condition=move_type_sql_condition,
+            )))
+        return {
+            self.env['account.move'].browse(move_id): self.env['account.move'].browse(duplicate_ids)
+            for move_id, duplicate_ids in result
+        }
+
+    def _get_duplicate_ref_sql_conditions(self, moves, move_table_and_alias):
         to_query = []
         out_moves = moves.filtered(lambda m: m.move_type in ('out_invoice', 'out_refund'))
         if out_moves:
@@ -2084,6 +2107,10 @@ class AccountMove(models.Model):
                 AND (
                    move.amount_total = duplicate_move.amount_total
                    AND move.invoice_date = duplicate_move.invoice_date
+                   AND (
+                      move.commercial_partner_id = duplicate_move.commercial_partner_id
+                      OR (move.commercial_partner_id IS NULL AND duplicate_move.state = 'draft')
+                   )
                 )
             """)
             to_query.append((out_moves, out_moves_sql_condition))
@@ -2104,6 +2131,10 @@ class AccountMove(models.Model):
                              OR
                              date_part('year', move.invoice_date) = date_part('year', duplicate_move.invoice_date)
                          )
+                         AND (
+                             move.commercial_partner_id = duplicate_move.commercial_partner_id
+                             OR (move.commercial_partner_id IS NULL AND duplicate_move.state = 'draft')
+                         )
                      )
                      -- case 2: different refs, same partner, amount and date
                      OR (
@@ -2115,35 +2146,7 @@ class AccountMove(models.Model):
                 )
             """)
             to_query.append((in_moves, in_moves_sql_condition))
-
-        result = []
-        for moves, move_type_sql_condition in to_query:
-            result.extend(self.env.execute_query(SQL("""
-                SELECT move.id AS move_id,
-                       array_agg(duplicate_move.id) AS duplicate_ids
-                  FROM %(move_table_and_alias)s
-                  JOIN account_move AS duplicate_move
-                    ON move.company_id = duplicate_move.company_id
-                   AND move.id != duplicate_move.id
-                   AND duplicate_move.state IN %(matching_states)s
-                   AND move.move_type = duplicate_move.move_type
-                   AND (
-                           move.commercial_partner_id = duplicate_move.commercial_partner_id
-                           OR (move.commercial_partner_id IS NULL AND duplicate_move.state = 'draft')
-                       )
-                   AND (%(move_type_sql_condition)s)
-                 WHERE move.id IN %(moves)s
-                 GROUP BY move.id
-                """,
-                matching_states=tuple(matching_states),
-                moves=tuple(moves.ids or [0]),
-                move_table_and_alias=move_table_and_alias,
-                move_type_sql_condition=move_type_sql_condition,
-            )))
-        return {
-            self.env['account.move'].browse(move_id): self.env['account.move'].browse(duplicate_ids)
-            for move_id, duplicate_ids in result
-        }
+        return to_query
 
     @api.depends('duplicated_ref_ids')
     def _compute_is_draft_duplicated_ref_ids(self):
@@ -2605,20 +2608,6 @@ class AccountMove(models.Model):
     def _onchange_date(self):
         if not self.is_invoice(True):
             self.line_ids._inverse_amount_currency()
-
-    @api.onchange('invoice_vendor_bill_id')
-    def _onchange_invoice_vendor_bill(self):
-        if self.invoice_vendor_bill_id:
-            # Copy invoice lines.
-            for line in self.invoice_vendor_bill_id.invoice_line_ids:
-                copied_vals = line.copy_data()[0]
-                self.invoice_line_ids += self.env['account.move.line'].new(copied_vals)
-
-            self.currency_id = self.invoice_vendor_bill_id.currency_id
-            self.fiscal_position_id = self.invoice_vendor_bill_id.fiscal_position_id
-
-            # Reset
-            self.invoice_vendor_bill_id = False
 
     @api.onchange('fiscal_position_id')
     def _onchange_fpos_id_show_update_fpos(self):
@@ -4217,7 +4206,7 @@ class AccountMove(models.Model):
                 where_string += " AND sequence_prefix !~ %(anti_regex)s "
 
         if self.journal_id.refund_sequence:
-            if self.move_type in ('out_refund', 'in_refund'):
+            if self.is_refund():
                 where_string += " AND move_type IN ('out_refund', 'in_refund') "
             else:
                 where_string += " AND move_type NOT IN ('out_refund', 'in_refund') "
@@ -4269,7 +4258,7 @@ class AccountMove(models.Model):
             else:
                 starting_sequence = "%s/%s/%02d/0000" % (self.journal_id.code, year_part, move_date.month)
 
-        if self.journal_id.refund_sequence and self.move_type in ('out_refund', 'in_refund'):
+        if self.journal_id.refund_sequence and self.is_refund():
             starting_sequence = "R" + starting_sequence
         if self.journal_id.payment_sequence and self.origin_payment_id or self.env.context.get('is_payment'):
             starting_sequence = "P" + starting_sequence
@@ -5564,6 +5553,7 @@ class AccountMove(models.Model):
                     validation_msgs.add(_("The Bill/Refund date is required to validate this document."))
 
         for move in self:
+            move.line_ids._check_constrains_account_id_journal_id()
             if move.state in ['posted', 'cancel']:
                 validation_msgs.add(_('The entry %(name)s (id %(id)s) must be in draft.', name=move.name, id=move.id))
             if not move.line_ids.filtered(lambda line: line.display_type not in ('line_section', 'line_subsection', 'line_note')):
@@ -6366,6 +6356,9 @@ class AccountMove(models.Model):
 
     def is_outbound(self, include_receipts=True):
         return self.move_type in self.get_outbound_types(include_receipts)
+
+    def is_refund(self):
+        return self.move_type in ('out_refund', 'in_refund')
 
     def _get_action_with_base_document_layout_configurator(self, report_action):
         if (

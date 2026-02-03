@@ -1188,7 +1188,7 @@ class AccountMoveLine(models.Model):
     def _compute_is_refund(self):
         for line in self:
             is_refund = False
-            if line.move_id.move_type in ('out_refund', 'in_refund'):
+            if line.move_id.is_refund():
                 is_refund = True
             elif line.move_id.move_type == 'entry':
                 if line.tax_repartition_line_id:
@@ -1801,7 +1801,6 @@ class AccountMoveLine(models.Model):
                         )
 
         lines.move_id._synchronize_business_models(['line_ids'])
-        lines._check_constrains_account_id_journal_id()
         # Remove analytic lines created for draft AMLs, after analytic_distribution has been updated
         lines.filtered(lambda l: l.parent_state == 'draft').analytic_line_ids.with_context(skip_analytic_sync=True).unlink()
         return lines
