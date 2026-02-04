@@ -172,7 +172,7 @@ class StockMove(models.Model):
         'Quantity', compute='_compute_quantity', digits='Product Unit', inverse='_set_quantity', store=True)
     # TODO: delete this field `show_operations`
     show_operations = fields.Boolean(related='picking_id.picking_type_id.show_operations')
-    picking_code = fields.Selection(related='picking_id.picking_type_id.code', readonly=True)
+    picking_code = fields.Selection(related='picking_type_id.code', readonly=True)
     show_details_visible = fields.Boolean('Details Visible', compute='_compute_show_details_visible')
     is_storable = fields.Boolean(related='product_id.is_storable')
     additional = fields.Boolean("Whether the move was added after the picking's confirmation", default=False)
@@ -1671,6 +1671,11 @@ Please change the quantity done or the rounding precision in your settings.""",
 
         return quantities
 
+    def _get_partner_id(self):
+        if self.location_id == self.env.company.internal_transit_location_id:
+            return False
+        return self.partner_id.id
+
     def _prepare_procurement_values(self):
         """ Prepare specific key for moves or other componenets that will be created from a stock rule
         comming from a stock move. This method could be override in order to add other custom key that could
@@ -1701,6 +1706,7 @@ Please change the quantity done or the rounding precision in your settings.""",
             'date_order': dates_info.get('date_order'),
             'date_deadline': self.date_deadline,
             'move_dest_ids': move_dest_ids,
+            'partner_id': move_dest_ids._get_partner_id() if move_dest_ids else False,
             'route_ids': route,
             'warehouse_id': warehouse,
             'priority': self.priority,

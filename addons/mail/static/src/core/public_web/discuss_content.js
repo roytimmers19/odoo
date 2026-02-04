@@ -3,15 +3,14 @@ import { Component, useEffect, useRef, useState } from "@odoo/owl";
 import { useThreadActions } from "@mail/core/common/thread_actions";
 import { AutoresizeInput } from "@mail/core/common/autoresize_input";
 import { ActionList } from "@mail/core/common/action_list";
+import { DiscussAvatar } from "@mail/core/common/discuss_avatar";
 import { Thread } from "@mail/core/common/thread";
 import { ThreadIcon } from "@mail/core/common/thread_icon";
 import { Composer } from "@mail/core/common/composer";
-import { ImStatus } from "@mail/core/common/im_status";
 import { useDynamicInterval } from "@mail/utils/common/misc";
 import { formatLocalDateTime } from "@mail/utils/common/dates";
 import { attClassObjectToString } from "@mail/utils/common/format";
 
-import { _t } from "@web/core/l10n/translation";
 import { FileUploader } from "@web/views/fields/file_handler";
 import { useService } from "@web/core/utils/hooks";
 
@@ -19,11 +18,11 @@ export class DiscussContent extends Component {
     static components = {
         ActionList,
         AutoresizeInput,
+        DiscussAvatar,
         Thread,
         ThreadIcon,
         Composer,
         FileUploader,
-        ImStatus,
     };
     static props = ["thread?"];
     static template = "mail.DiscussContent";
@@ -95,7 +94,6 @@ export class DiscussContent extends Component {
 
     async onFileUploaded(file) {
         await this.thread.channel?.notifyAvatarToServer(file.data);
-        this.notification.add(_t("The avatar has been updated!"), { type: "success" });
     }
 
     async renameGuest(name) {
