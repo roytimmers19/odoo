@@ -62,7 +62,7 @@ from odoo.exceptions import AccessError
 from odoo.fields import Command
 from odoo.http.requestlib import Request, _request_stack, request
 from odoo.http.router import root
-from odoo.http.session import DEFAULT_LANG, get_default_session
+from odoo.http.session import DEFAULT_LANG, get_default_session, logout, update_session_token
 from odoo.http.session import Session as OdooHttpSession
 from odoo.modules.registry import Registry
 from odoo.sql_db import Cursor, Savepoint
@@ -2375,16 +2375,28 @@ class HttpCase(TransactionCase):
             odoo.tools.misc.dumpstacks()
 
     def logout(self, keep_db=True):
-        self.session.logout(keep_db=keep_db)
+        logout(self.session, keep_db=keep_db)
         root.session_store.save(self.session)
 
-    def authenticate(self, user, password, browser: ChromeBrowser = None):
+    def authenticate(self, user, password, *,
+        browser: ChromeBrowser = None, session_extra: dict | None = None):
         if getattr(self, 'session', None):
             root.session_store.delete(self.session)
 
         self.session = session = root.session_store.new()
-        session.update(get_default_session(), db=get_db_name())
+        session.update(
+            get_default_session(),
+            db=get_db_name(),
+            # In order to avoid perform a query to each first `url_open`
+            # in a test (insert `res.device.log`).
+            _trace_disable=True,
+        )
         session.context['lang'] = DEFAULT_LANG
+
+        if session_extra:
+            if extra_ctx := session_extra.pop('context', None):
+                session.context.update(extra_ctx)
+            session.update(session_extra)
 
         if user: # if authenticated
             # Flush and clear the current transaction.  This is useful, because
@@ -2406,7 +2418,7 @@ class HttpCase(TransactionCase):
             session['login'] = user
             session['session_token'] = None
             if uid:
-                session._update_session_token(env)
+                update_session_token(session, env)
             session['context'] = dict(env['res.users'].context_get())
 
         root.session_store.save(session)
