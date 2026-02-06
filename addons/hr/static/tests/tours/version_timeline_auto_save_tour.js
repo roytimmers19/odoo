@@ -18,7 +18,7 @@ registry.category("web_tour.tours").add("version_timeline_auto_save_tour", {
         },
         {
             content: "Open Payroll Page",
-            trigger: ".o_notebook_headers a[name='payroll_information']",
+            trigger: ".o_notebook_headers button[name='payroll_information']",
             run: "click",
         },
         {
@@ -44,6 +44,11 @@ registry.category("web_tour.tours").add("version_timeline_auto_save_tour", {
         {
             content: "Choose date X + 2",
             trigger: ".o_date_item_cell:nth-child(12) > div",
+            run: "click",
+        },
+        {
+            content: "Wait the form is dirty and click on save button",
+            trigger: "body:has(.o_form_dirty) .o_form_button_save",
             run: "click",
         },
         {

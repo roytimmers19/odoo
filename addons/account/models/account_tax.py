@@ -4596,6 +4596,8 @@ class AccountTax(models.Model):
                         raw_gross_price_unit /= base_line['rate']
                     else:
                         raw_gross_price_unit = 0.0
+            elif not base_line['quantity']:
+                raw_gross_price_unit = raw_gross_total_excluded
             else:
                 raw_gross_price_unit = raw_gross_total_excluded / base_line['quantity']
             tax_details[f'raw_gross_price_unit{suffix}'] = float_round(raw_gross_price_unit, precision_digits=precision_digits)
@@ -4932,9 +4934,9 @@ class AccountTaxRepartitionLine(models.Model):
         default=100,
         digits=(16, 12),
         required=True,
-        help="Factor to apply on the account move lines generated from this distribution line, in percents",
+        help="Factor to apply on the journal items generated from this distribution line, in percents",
     )
-    factor = fields.Float(string="Factor Ratio", compute="_compute_factor", help="Factor to apply on the account move lines generated from this distribution line")
+    factor = fields.Float(string="Factor Ratio", compute="_compute_factor", help="Factor to apply on the journal items generated from this distribution line")
     repartition_type = fields.Selection(string="Based On", selection=[('base', 'Base'), ('tax', 'of tax')], required=True, default='tax', help="Base on which the factor will be applied.")
     document_type = fields.Selection(string="Related to", selection=[('invoice', 'Invoice'), ('refund', 'Refund')], required=True)
     account_id = fields.Many2one(string="Account",
