@@ -1995,6 +1995,7 @@ class BaseModel(metaclass=MetaModel):
         if not func:
             raise ValueError(f"Aggregate method is mandatory for {fname!r}")
 
+        table = table._with_model(table._model.with_context(_read_groupby=True))
         field = self._fields[fname]
         if func == 'sum_currency':
             if field.type != 'monetary':
@@ -2035,6 +2036,7 @@ class BaseModel(metaclass=MetaModel):
         if fname not in self._fields:
             raise ValueError(f"Invalid field {fname!r} on model {self._name!r}")
         field = self._fields[fname]
+        table = table._with_model(table._model.with_context(_read_groupby=True))
 
         if field.type == 'properties':
             sql_expr = table[fname][seq_fnames]
@@ -4705,7 +4707,10 @@ class BaseModel(metaclass=MetaModel):
         # add order and limits
         if order:
             query.order = self._order_to_sql(query.table, order)
-        if limit is not None:
+
+        # In RPC, None is not available; False is used instead to mean "no limit"
+        # Note: True is kept for backward-compatibility (treated as 1)
+        if limit is not None and limit is not False:
             query.limit = limit
         if offset is not None:
             query.offset = offset

@@ -266,12 +266,16 @@ class TestLivechatBasicFlowHttpCase(HttpCaseWithUserDemo, TestLivechatCommon):
                         "im_status": "online",
                         "im_status_access_token": self.operator.partner_id._get_im_status_access_token(),
                         "is_public": False,
+                        "main_user_id": self.operator.id,
                         "mention_token": self.operator.partner_id._get_mention_token(),
                         "user_livechat_username": "El Deboulonnator",
                         "write_date": fields.Datetime.to_string(
                             self.operator.partner_id.write_date
                         ),
-                    }
+                    },
+                ),
+                "res.users": self._filter_users_fields(
+                    {"id": self.operator.id, "employee_ids": []},
                 ),
                 "website": [
                     {"id": self.env.ref("website.default_website").id, "name": "My Website"}
@@ -362,7 +366,6 @@ class TestLivechatBasicFlowHttpCase(HttpCaseWithUserDemo, TestLivechatCommon):
                     "channel_id": channel.id,
                     "channel_role": False,
                     "create_date": fields.Datetime.to_string(guest_member.create_date),
-                    "custom_channel_name": False,
                     "custom_notifications": False,
                     "guest_id": guest.id,
                     "id": guest_member.id,

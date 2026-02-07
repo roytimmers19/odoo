@@ -331,6 +331,8 @@ class MailMessage(models.Model):
         # Rules do not apply to administrator
         if self.env.su or bypass_access:
             return super()._search(domain, offset, limit, order, bypass_access=True, **kwargs)
+        if self.env.context.get('_read_groupby'):
+            raise ValueError("Cannot group by mail.message")
 
         # Non-employee see only messages with a subtype and not internal
         domain = self._get_search_domain_share() & Domain(domain)
@@ -1214,6 +1216,17 @@ class MailMessage(models.Model):
                     ["is_active", "partner_id"],
                     predicate=lambda t: target_user and add_followers and non_channel_records,
                     value=lambda t: follower_by_record_and_partner[t, target_user.partner_id],
+                ),
+                res.attr(
+                    "priority",
+                    value=lambda t: t[t._priority_field],
+                    predicate=lambda t: hasattr(t, "_priority_field"),
+                    sudo=True,
+                ),
+                res.attr(
+                    "priority_definition",
+                    predicate=lambda t: hasattr(t, "_priority_field"),
+                    value=lambda t: t.fields_get([t._priority_field], ["selection"])[t._priority_field]["selection"],
                 ),
             ),
             as_thread=True,

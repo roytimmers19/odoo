@@ -2,6 +2,7 @@ import { MessageConfirmDialog } from "@mail/core/common/message_confirm_dialog";
 import { fields, Record } from "@mail/model/export";
 
 import { _t } from "@web/core/l10n/translation";
+import { user } from "@web/core/user";
 import { Deferred } from "@web/core/utils/concurrency";
 import { rpc } from "@web/core/network/rpc";
 import {
@@ -101,6 +102,14 @@ export class DiscussChannel extends Record {
     get allowedToLeaveChannelTypes() {
         return ["channel", "group"];
     }
+    get allowedToRenameChannelTypes() {
+        return ["channel", "group"];
+    }
+    get isAllowedToRename() {
+        return (
+            this.allowedToRenameChannelTypes.includes(this.channel_type) && this.thread.is_editable
+        );
+    }
     get areAllMembersLoaded() {
         return this.member_count === this.channel_member_ids.length;
     }
@@ -194,8 +203,14 @@ export class DiscussChannel extends Record {
         return this.channel_member_ids.filter(({ persona }) => persona?.notEq(this.store.self));
     }
     get displayName() {
-        if (this.supportsCustomChannelName && this.self_member_id?.custom_channel_name) {
-            return this.self_member_id.custom_channel_name;
+        if (this.default_display_mode === "video_full_screen" && this.create_date && !this.name) {
+            const localizedDatetime = this.store.self?.tz
+                ? this.create_date.setZone(this.store.self?.tz)
+                : this.create_date.toLocal();
+            const formatDate = localizedDatetime.toLocaleString(luxon.DateTime.DATE_MED, {
+                locale: user.lang,
+            });
+            return _t("Meeting - %(date)s", { date: formatDate });
         }
         if (this.channel_type === "chat" && this.correspondent) {
             return this.correspondent.name;
@@ -213,6 +228,7 @@ export class DiscussChannel extends Record {
         }
         return this.name;
     }
+    create_date = fields.Datetime();
     /** @type {"not_fetched"|"pending"|"fetched"} */
     fetchMembersState = "not_fetched";
     /** @type {"not_fetched"|"fetching"|"fetched"} */
@@ -666,28 +682,17 @@ export class DiscussChannel extends Record {
     async rename(name) {
         const newName = name.trim();
         if (
+            this.isAllowedToRename &&
             newName !== this.displayName &&
-            ((newName && this.channel_type === "channel") || this.isChatChannel)
+            (newName || this.channel_type === "group")
         ) {
-            if (["channel", "group"].includes(this.channel_type)) {
-                this.name = newName;
-                await this.store.env.services.orm.call(
-                    "discuss.channel",
-                    "channel_rename",
-                    [[this.id]],
-                    { name: newName }
-                );
-            } else if (this.supportsCustomChannelName) {
-                if (this.self_member_id) {
-                    this.self_member_id.custom_channel_name = newName;
-                }
-                await this.store.env.services.orm.call(
-                    "discuss.channel",
-                    "channel_set_custom_name",
-                    [[this.id]],
-                    { name: newName }
-                );
-            }
+            this.name = newName;
+            await this.store.env.services.orm.call(
+                "discuss.channel",
+                "channel_rename",
+                [[this.id]],
+                { name: newName }
+            );
         }
     }
 

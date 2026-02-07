@@ -30,6 +30,8 @@ class ReportMrpReport_Bom_Structure(models.AbstractModel):
                 res['subcontracting'] = self._get_subcontracting_line(bom, seller, level + 1, res['quantity'])
                 if not self.env.context.get('minimized', False):
                     res['bom_cost'] += res['subcontracting']['bom_cost']
+                    res['bom_unit_cost'] += bom.uom_id._compute_price(res['subcontracting']['bom_cost'], product.uom_id)
+
         return res
 
     def _get_bom_array_lines(self, data, level, unfolded_ids, unfolded, parent_unfolded=True):
@@ -98,14 +100,14 @@ class ReportMrpReport_Bom_Structure(models.AbstractModel):
         return res
 
     @api.model
-    def _get_quantities_info(self, product, bom_uom, product_info, parent_bom=False, parent_product=False):
-        quantities_info = super()._get_quantities_info(product, bom_uom, product_info, parent_bom, parent_product)
+    def _get_quantities_info(self, product, bom_uom, product_info, bom=False, parent_bom=False, parent_product=False):
+        quantities_info = super()._get_quantities_info(product, bom_uom, product_info, bom, parent_bom, parent_product)
         if parent_product and parent_bom and parent_bom.type == 'subcontract' and product.is_storable:
             route_info = product_info.get(parent_product.id, {}).get(parent_bom.id, {})
             if route_info and route_info['route_type'] == 'subcontract':
                 subcontracting_loc = route_info['supplier'].partner_id.property_stock_subcontractor
                 subloc_product = product.with_context(location=subcontracting_loc.id, warehouse_id=False)
-                subloc_product.fetch(['free_qty', 'qty_available'])
+                subloc_product.fetch(['free_qty', 'qty_available', 'virtual_available'])
                 stock_loc = f"subcontract_{subcontracting_loc.id}"
                 if not product_info[product.id]['consumptions'].get(stock_loc, False):
                     product_info[product.id]['consumptions'][stock_loc] = 0
@@ -113,6 +115,7 @@ class ReportMrpReport_Bom_Structure(models.AbstractModel):
                 quantities_info['free_qty'] = quantities_info['free_to_manufacture_qty']
                 quantities_info['on_hand_qty'] = product.uom_id._compute_quantity(subloc_product.qty_available, bom_uom)
                 quantities_info['stock_loc'] = stock_loc
+                quantities_info['forecasted_qty'] = subloc_product.virtual_available
 
         return quantities_info
 
