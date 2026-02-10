@@ -302,6 +302,7 @@ class MrpProduction(models.Model):
         search='_search_date_category', readonly=True
     )
     serial_numbers_count = fields.Integer("Count of serial numbers", compute='_compute_serial_numbers_count')
+    note = fields.Html(string="Additional Notes", compute='_compute_note', store=True, help="Add this note on the manufacturing order to share any additional information")
 
     _name_uniq = models.Constraint(
         'unique(name, company_id)',
@@ -874,6 +875,16 @@ class MrpProduction(models.Model):
             qty_none_or_all = production.qty_producing in (0, production.product_qty)
             production.show_produce_all = state_ok and qty_none_or_all
             production.show_produce = state_ok and not qty_none_or_all
+
+    @api.depends('bom_id', 'bom_id.note')
+    def _compute_note(self):
+        for record in self:
+            if record.note:
+                continue
+            if record.bom_id:
+                record.note = record.bom_id.note
+            else:
+                record.note = False
 
     def _search_is_delayed(self, operator, value):
         if operator not in ('in', 'not in'):
@@ -2643,6 +2654,9 @@ class MrpProduction(models.Model):
                     workorder.name = operation.name
             elif workorder.operation_id and workorder.operation_id not in operations_by_id:
                 workorders_to_unlink |= workorder
+        # Resequence of workorder as per the BOM operation sequance
+        if self.workorder_ids.operation_id.ids != self.bom_id.operation_ids.ids:
+            self._resequence_workorders()
         # Creates a workorder for each remaining operation.
         workorders_values = []
         for operation in operations_by_id.values():
@@ -3155,8 +3169,13 @@ class MrpProduction(models.Model):
             wo.sequence = index_wo
         offset = len(phantom_workorders)
         non_phantom_workorders = self.workorder_ids - phantom_workorders
+        operation_sequence_map = {op.id: index for index, op in enumerate(self.bom_id.operation_ids)}
         for index_wo, wo in enumerate(non_phantom_workorders):
-            wo.sequence = index_wo + offset
+            if wo.operation_id:
+                wo.sequence = operation_sequence_map.get(wo.operation_id.id, 0) + offset
+                wo.blocked_by_workorder_ids = [Command.clear()]
+            else:
+                wo.sequence = index_wo + offset
         return True
 
     def _track_get_fields(self):

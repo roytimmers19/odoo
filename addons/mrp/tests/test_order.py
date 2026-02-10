@@ -4928,6 +4928,14 @@ class TestMrpOrder(TestMrpCommon):
         self.assertEqual(fields.Datetime.now(), production.workorder_ids.date_start)
         self.assertEqual(fields.Datetime.now() + timedelta(hours=6), production.workorder_ids.date_finished, "The time difference should be 6 hours: 6 for the shift and 0 for the lunch pause")
 
+        production.workorder_ids.workcenter_id = self.workcenter_2.id
+        workcenter_5.time_efficiency = 50
+        self.assertEqual(production.workorder_ids.date_finished, fields.Datetime.now() + timedelta(hours=7), "The time difference should be 7 hours: 6 for the shift and 1 for the lunch pause")
+        production.workorder_ids.workcenter_id = workcenter_5
+        self.assertEqual(production.workorder_ids.date_finished, fields.Datetime.now() + timedelta(hours=12), "The time difference should be 12 hours: 6 / 0.5 for the shift and 0 for the lunch pause")
+        production.workorder_ids.workcenter_id = self.workcenter_2.id
+        self.assertEqual(production.workorder_ids.date_finished, fields.Datetime.now() + timedelta(hours=7), "The time difference should be 7 hours: 6 for the shift and 1 for the lunch pause")
+
     def test_compute_tracked_time_3(self):
         """
         Checks that the expected duration calculation is correct when the BoM has a different UoM than the product.
@@ -5259,7 +5267,6 @@ class TestMrpOrder(TestMrpCommon):
 
     def test_product_qty_digits_precision(self):
         self.env['decimal.precision'].search([('name', '=', 'Product Unit')]).digits = 5
-        self.bom_1.uom_id.rounding = 0.00001
         mo = self.env['mrp.production'].create({
             'bom_id': self.bom_1.id,
             'product_qty': 1.23456,
