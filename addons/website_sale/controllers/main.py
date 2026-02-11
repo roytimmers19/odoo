@@ -367,12 +367,6 @@ class WebsiteSale(payment_portal.PaymentPortal):
         if search:
             post['search'] = search
 
-        if not (category or search):
-            post['extra_domain'] = Domain.OR([
-                Domain('public_categ_ids', '=', False),
-                Domain('public_categ_ids.not_in_shop', '=', False),
-            ])
-
         options = self._get_search_options(
             category=category,
             attribute_value_dict=attribute_value_dict,
@@ -380,7 +374,13 @@ class WebsiteSale(payment_portal.PaymentPortal):
             max_price=max_price,
             conversion_rate=conversion_rate,
             display_currency=website.currency_id,
-            **post
+            extra_domain=Domain.OR([
+                Domain('public_categ_ids', '=', False),
+                Domain('public_categ_ids.not_in_shop', '=', False),
+            ])
+            if not (category or search)
+            else None,
+            **post,
         )
         fuzzy_search_term, product_count, search_product = self._shop_lookup_products(
             options, post, search, website
@@ -468,9 +468,12 @@ class WebsiteSale(payment_portal.PaymentPortal):
         products.fetch()
 
         # map each product to its variant, and prefetch the variants
-        variants = request.env['product.product'].sudo().browse(product._get_first_possible_variant_id() for product in products)
+        Product = request.env['product.product']
+        product_variant_ids = [product._get_first_possible_variant_id() for product in products]
+        variants = Product.sudo().browse(vid for vid in product_variant_ids if vid)
         variants.fetch()
-        product_variants = dict(zip(products, variants))
+        variant_by_id = {v.id: v for v in variants}
+        product_variants = dict(zip(products, (variant_by_id.get(vid, Product) for vid in product_variant_ids)))
 
         ProductAttribute = request.env['product.attribute']
         if products:

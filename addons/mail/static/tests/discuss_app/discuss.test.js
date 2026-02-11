@@ -22,6 +22,7 @@ import {
     STORE_FETCH_ROUTES,
     triggerHotkey,
     waitStoreFetch,
+    getChannelCommandsForThread,
 } from "@mail/../tests/mail_test_helpers";
 import { mailDataHelpers } from "@mail/../tests/mock_server/mail_mock_server";
 
@@ -315,6 +316,15 @@ test("Click on avatar opens its partner chat window", async () => {
     await contains(".o_card_user_infos > a:text('+45687468')");
 });
 
+test("guests are not allowed to use commands", async () => {
+    const pyEnv = await startServer();
+    const channelId = pyEnv["discuss.channel"].create({ name: "wololo" });
+    await start({ authenticateAs: false });
+    await openDiscuss(channelId);
+    await insertText(".o-mail-Composer-input", "/who");
+    expect(getChannelCommandsForThread(channelId)).toHaveLength(0);
+});
+
 test("sidebar: chat im_status rendering", async () => {
     const pyEnv = await startServer();
     const [partnerId_1, partnerId_2, partnerId_3] = pyEnv["res.partner"].create([
@@ -520,7 +530,7 @@ test("receive new needaction messages", async () => {
         message_id: messageId_1,
         store_data: new mailDataHelpers.Store(
             pyEnv["mail.message"].browse(messageId_1),
-            makeKwArgs({ for_current_user: true, add_followers: true })
+            makeKwArgs({ for_current_user: true, inbox_fields: true })
         ).get_result(),
     });
     await contains("button:has(:text('Inbox'))", { contains: [".badge:text('1')"] });
@@ -544,7 +554,7 @@ test("receive new needaction messages", async () => {
         message_id: messageId_2,
         store_data: new mailDataHelpers.Store(
             pyEnv["mail.message"].browse(messageId_2),
-            makeKwArgs({ for_current_user: true, add_followers: true })
+            makeKwArgs({ for_current_user: true, inbox_fields: true })
         ).get_result(),
     });
     await contains("button:has(:text('Inbox'))", { contains: [".badge:text('2')"] });
@@ -578,7 +588,7 @@ test("receive a message that is not linked to thread", async () => {
         message_id: messageId_1,
         store_data: new mailDataHelpers.Store(
             pyEnv["mail.message"].browse(messageId_1),
-            makeKwArgs({ for_current_user: true, add_followers: true })
+            makeKwArgs({ for_current_user: true, inbox_fields: true })
         ).get_result(),
     });
     await contains("button:has(:text('Inbox'))", { contains: [".badge:text('1')"] });
