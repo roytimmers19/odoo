@@ -128,7 +128,6 @@ class MrpWorkorder(models.Model):
     production_date = fields.Datetime('Production Date', compute='_compute_production_date', store=True)
     json_popover = fields.Char('Popover Data JSON', compute='_compute_json_popover')
     show_json_popover = fields.Boolean('Show Popover?', compute='_compute_json_popover')
-    consumption = fields.Selection(related='production_id.consumption')
     qty_reported_from_previous_wo = fields.Float('Carried Quantity', digits='Product Unit', copy=False,
         help="The quantity already produced awaiting allocation in the backorders chain.")
     is_planned = fields.Boolean(related='production_id.is_planned')
@@ -212,12 +211,14 @@ class MrpWorkorder(models.Model):
                         'color': 'text-danger',
                         'msg': _("Scheduled before the previous work order, planned from %(start)s to %(end)s",
                             start=format_datetime(self.env, prev_start, dt_format=False),
-                            end=format_datetime(self.env, prev_finished, dt_format=False))
+                            end=format_datetime(self.env, prev_finished, dt_format=False)),
+                        'reason': 'misplanned',
                     })
                 if conflicted_dict.get(wo.id):
                     infos.append({
                         'color': 'text-danger',
-                        'msg': _("Planned at the same time as other workorder(s) at %s", wo.workcenter_id.display_name)
+                        'msg': _("Planned at the same time as other workorder(s) at %s", wo.workcenter_id.display_name),
+                        'reason': 'conflict',
                     })
             color_icon = infos and infos[-1]['color'] or False
             wo.show_json_popover = bool(color_icon)
@@ -270,6 +271,10 @@ class MrpWorkorder(models.Model):
     def _set_dates(self):
         for wo in self.sudo():
             if wo.leave_id:
+                # gantt unschedule write False on date_start and date_finished
+                if not wo.date_start and not wo.date_finished:
+                    wo.leave_id.unlink()
+                    continue
                 if (not wo.date_start or not wo.date_finished):
                     raise UserError(_("It is not possible to unplan one single Work Order. "
                               "You should unplan the Manufacturing Order instead in order to unplan all the linked operations."))
@@ -570,8 +575,12 @@ class MrpWorkorder(models.Model):
         # Plan only suitable workorders
         if not replan:
             return
+        self._internal_plan_workorder(date_start, self.workcenter_id | self.workcenter_id.alternative_workcenter_ids)
+
+    def _internal_plan_workorder(self, date_start, workcenters):
+        self.ensure_one()
         # Consider workcenter and alternatives
-        workcenters = self.workcenter_id | self.workcenter_id.alternative_workcenter_ids
+        # workcenters = self.workcenter_id | self.workcenter_id.alternative_workcenter_ids
         best_date_finished = datetime.max
         vals = {}
         for workcenter in workcenters:
@@ -881,6 +890,31 @@ class MrpWorkorder(models.Model):
             if wo.duration == 0.0:
                 wo.duration = wo.duration_expected
                 wo.duration_percent = 100
+
+    def action_plan(self):
+        for workorder in self:
+            if workorder.state in ['done', 'cancel']:
+                continue
+            workorder.leave_id.unlink()
+            date_to_plan_on = max((wo.leave_id.date_to for wo in workorder.blocked_by_workorder_ids if wo.leave_id), default=datetime.now())
+            if self.env.context.get('date_to_plan_on'):
+                date_to_plan_on = fields.Datetime.from_string(self.env.context.get('date_to_plan_on'))
+            workcenter_to_plan_on = workorder.workcenter_id
+            if self.env.context.get('workcenter_to_plan_on'):
+                workcenter_to_plan_on = self.env['mrp.workcenter'].browse(self.env.context.get('workcenter_to_plan_on'))
+            workorder._internal_plan_workorder(date_to_plan_on, workcenter_to_plan_on)
+            if not workorder.blocked_by_workorder_ids:
+                initial_workorders = workorder.production_id.workorder_ids.filtered(lambda wo: not wo.blocked_by_workorder_ids)
+                workorder.production_id.with_context(force_date=True).write({
+                    'date_start': min((wo.leave_id.date_from for wo in initial_workorders if wo.leave_id), default=None),
+                })
+
+    def action_unplan(self):
+        self.leave_id.unlink()
+        self.write({
+            'date_start': False,
+            'date_finished': False,
+        })
 
     def _compute_expected_operation_cost(self, without_employee_cost=False):
         return (self.duration_expected / 60.0) * (self.costs_hour or self.workcenter_id.costs_hour)
