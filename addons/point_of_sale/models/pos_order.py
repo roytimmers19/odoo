@@ -894,7 +894,6 @@ class PosOrder(models.Model):
 
         fiscal_position = self.fiscal_position_id
         pos_config = self.config_id
-        rounding_method = pos_config.rounding_method
         move_type = 'out_invoice' if not any(order.is_refund for order in self) else 'out_refund'
         invoice_payment_term_id = (
             self.partner_id.property_payment_term_id.id
@@ -918,11 +917,13 @@ class PosOrder(models.Model):
             'fiscal_position_id': fiscal_position.id,
             'invoice_line_ids': self._prepare_invoice_lines(move_type),
             'invoice_payment_term_id': invoice_payment_term_id,
-            'invoice_cash_rounding_id': rounding_method.id,
         }
         if is_single_order and self.refunded_order_id.account_move:
             vals['ref'] = _('Reversal of: %s', self.refunded_order_id.account_move.name)
             vals['reversed_entry_id'] = self.refunded_order_id.account_move.id
+
+        if pos_config.cash_rounding and (not pos_config.only_round_cash_method or any(p.payment_method_id.is_cash_count for p in self.payment_ids)):
+            vals['invoice_cash_rounding_id'] = pos_config.rounding_method.id
 
         if any(order.floating_order_name for order in self):
             vals.update({'narration': ', '.join(self.filtered('floating_order_name').mapped('floating_order_name'))})
@@ -1554,7 +1555,7 @@ class AccountCashRounding(models.Model):
         open_session = self.env['pos.session'].search([('config_id.rounding_method', 'in', self.ids), ('state', '!=', 'closed')], limit=1)
         if open_session:
             raise ValidationError(
-                _("You are not allowed to change the cash rounding configuration while a pos session using it is already opened."))
+                _("You are not allowed to change the rounding configuration while a pos session using it is already opened."))
 
     @api.model
     def _load_pos_data_domain(self, data, config):
