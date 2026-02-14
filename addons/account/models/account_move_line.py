@@ -49,8 +49,8 @@ class AccountMoveLine(models.Model):
     journal_group_id = fields.Many2one(
         string='Ledger',
         comodel_name='account.journal.group',
+        related='journal_id.journal_group_id',
         store=False,
-        search='_search_journal_group_id',
     )
 
     company_id = fields.Many2one(
@@ -813,7 +813,10 @@ class AccountMoveLine(models.Model):
                     # Ignore date and display_type filters as they do not impact the cumulated balance
                     if (
                         (field == 'date' and operator in ('>=', '<=', '=', '>', '<'))
-                        or (field == 'display_type' and operator == 'not in' and value == ('line_section', 'line_subsection', 'line_note'))
+                        or (
+                            field == 'display_type' and operator == 'not in' and isinstance(value, (set, list, tuple))
+                            and len(set(value) - {'line_section', 'line_subsection', 'line_note'}) == 0
+                        )
                     ):
                         continue
                 # Ignore AND operators
@@ -1443,13 +1446,6 @@ class AccountMoveLine(models.Model):
             'target': 'new',
             'type': 'ir.actions.act_window',
         }
-
-    # -------------------------------------------------------------------------
-    # SEARCH METHODS
-    # -------------------------------------------------------------------------
-
-    def _search_journal_group_id(self, operator, value):
-        return self.env['account.move']._search_journal_group_id(operator, value)
 
     # -------------------------------------------------------------------------
     # INVERSE METHODS

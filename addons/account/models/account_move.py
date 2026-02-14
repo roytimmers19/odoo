@@ -176,9 +176,9 @@ class AccountMove(models.Model):
     )
     journal_group_id = fields.Many2one(
         'account.journal.group',
+        related='journal_id.journal_group_id',
         string='Ledger',
         store=False,
-        search='_search_journal_group_id',
     )
     company_id = fields.Many2one(
         comodel_name='res.company',
@@ -1289,11 +1289,11 @@ class AccountMove(models.Model):
                                     and reverse_move_types == {'entry'})
                     if in_reverse or out_reverse or misc_reverse:
                         new_pmt_state = 'reversed'
-            elif invoice.state == 'posted' and invoice.matched_payment_ids.filtered(lambda p: not p.move_id and p.state == 'in_process'):
+            elif invoice.state == 'posted' and invoice.matched_payment_ids.filtered(lambda p: not p.move_id and p.state == 'paid'):
                 new_pmt_state = invoice._get_invoice_in_payment_state()
             elif reconciliation_vals:
                 new_pmt_state = 'partial'
-            elif invoice.state == 'posted' and invoice.matched_payment_ids.filtered(lambda p: not p.move_id and p.state == 'paid'):
+            elif invoice.state == 'posted' and invoice.matched_payment_ids.filtered(lambda p: not p.move_id and p.state == 'reconciled'):
                 new_pmt_state = invoice._get_invoice_in_payment_state()
             invoice.payment_state = new_pmt_state
 
@@ -1582,6 +1582,7 @@ class AccountMove(models.Model):
                 )
 
             if payments_widget_vals['content']:
+                payments_widget_vals['content'] = sorted(payments_widget_vals['content'], key=lambda x: x['date'])
                 move.invoice_payments_widget = payments_widget_vals
             else:
                 move.invoice_payments_widget = False
@@ -2517,15 +2518,6 @@ class AccountMove(models.Model):
     # -------------------------------------------------------------------------
     # SEARCH METHODS
     # -------------------------------------------------------------------------
-
-    def _search_journal_group_id(self, operator, value):
-        field = 'name' if 'like' in operator else 'id'
-        journal_groups = self.env['account.journal.group'].search([(field, operator, value)])
-        return Domain.OR([
-            Domain('journal_id', 'not in', group.excluded_journal_ids.ids)
-            & Domain('journal_id.company_id', '=?', group.company_id.id)
-            for group in journal_groups
-        ])
 
     def _search_reconciled_payment_ids(self, operator, value):
         if operator not in ('in', '='):
@@ -6592,6 +6584,21 @@ class AccountMove(models.Model):
         term_lines = self.line_ids.filtered(lambda line: line.display_type == 'payment_term')
         if not term_lines:
             return {}
+        unreconciled_paid_amount = sum(
+            payment.currency_id._convert(
+                payment.amount,
+                self.currency_id,
+                self.company_id,
+                payment.date
+            )
+            for payment in self.reconciled_payment_ids.filtered(
+                lambda p: (
+                    not p.is_reconciled
+                    and not p.is_matched
+                    and p.state == 'paid'
+                )
+            )
+        )
         installments = term_lines._get_installments_data()
         not_reconciled_installments = [x for x in installments if not x['reconciled']]
         overdue_installments = [x for x in not_reconciled_installments if x['type'] == 'overdue']
@@ -6643,8 +6650,8 @@ class AccountMove(models.Model):
             })
         else:
             installment_state = None
-            amount_due = self.amount_residual
-            next_amount_to_pay = self.amount_residual
+            amount_due = self.amount_residual - unreconciled_paid_amount
+            next_amount_to_pay = self.amount_residual - unreconciled_paid_amount
             next_payment_reference = self.name
             next_due_date = self.invoice_date_due
 
@@ -6668,6 +6675,7 @@ class AccountMove(models.Model):
             'due_date': self.invoice_date_due,
             'not_reconciled_installments': not_reconciled_installments,
             'is_last_installment': len(not_reconciled_installments) == 1,
+            'unreconciled_paid_amount': unreconciled_paid_amount,
             **additional_info,
         }
 
