@@ -195,10 +195,11 @@ class TestDiscussFullPerformance(HttpCase, MailCommon):
         self.employees = self.env['hr.employee'].create([{
             'user_id': user.id,
         } for user in self.users])
-        self.leave_type = self.env['hr.leave.type'].create({
+        self.work_entry_type = self.env['hr.work.entry.type'].create({
             'requires_allocation': False,
             'name': 'Legal Leaves',
-            'time_type': 'leave',
+            'code': 'Legal Leaves',
+            'count_as': 'absence',
             'request_unit': 'day',
             'unit_of_measure': 'day',
         })
@@ -206,7 +207,7 @@ class TestDiscussFullPerformance(HttpCase, MailCommon):
             'request_date_from': fields.Datetime.today() + relativedelta(days=-2),
             'request_date_to': fields.Datetime.today() + relativedelta(days=2),
             'employee_id': employee.id,
-            'holiday_status_id': self.leave_type.id,
+            'work_entry_type_id': self.work_entry_type.id,
         } for employee in self.employees])
         self.authenticate(self.users[0].login, self.password)
         Channel = self.env["discuss.channel"].with_user(self.users[0])
@@ -1342,6 +1343,7 @@ class TestDiscussFullPerformance(HttpCase, MailCommon):
                     {"content": "😊", "message": last_message.id},
                 ],
                 "record_name": "general",
+                "reply_to": '"Ernest Employee" <catchall.test@test.mycompany.com>',
                 "res_id": 1,
                 "scheduledDatetime": False,
                 "starred": False,
@@ -1381,6 +1383,7 @@ class TestDiscussFullPerformance(HttpCase, MailCommon):
                 ],
                 "record_name": "public channel 1",
                 "res_id": channel.id,
+                "reply_to": '"test2" <catchall.test@test.mycompany.com>',
                 "scheduledDatetime": False,
                 "starred": True,
                 "subject": False,
@@ -1416,6 +1419,7 @@ class TestDiscussFullPerformance(HttpCase, MailCommon):
                 "rating_id": False,
                 "reactions": [],
                 "record_name": "public channel 2",
+                "reply_to": '"Ernest Employee" <catchall.test@test.mycompany.com>',
                 "res_id": channel.id,
                 "scheduledDatetime": False,
                 "starred": False,
@@ -1453,6 +1457,7 @@ class TestDiscussFullPerformance(HttpCase, MailCommon):
                 "rating_id": False,
                 "reactions": [],
                 "record_name": "group restricted channel 1",
+                "reply_to": '"OdooBot" <catchall.test@test.mycompany.com>',
                 "res_id": channel.id,
                 "scheduledDatetime": False,
                 "starred": False,
@@ -1489,6 +1494,7 @@ class TestDiscussFullPerformance(HttpCase, MailCommon):
                 "rating_id": False,
                 "reactions": [],
                 "record_name": "group restricted channel 2",
+                "reply_to": '"Ernest Employee" <catchall.test@test.mycompany.com>',
                 "res_id": channel.id,
                 "scheduledDatetime": False,
                 "starred": False,
@@ -1522,6 +1528,7 @@ class TestDiscussFullPerformance(HttpCase, MailCommon):
                 "rating_id": False,
                 "reactions": [],
                 "record_name": "test1 Ernest Employee",
+                "reply_to": '"test1" <catchall.test@test.mycompany.com>',
                 "res_id": channel.id,
                 "scheduledDatetime": False,
                 "starred": False,
@@ -1555,6 +1562,7 @@ class TestDiscussFullPerformance(HttpCase, MailCommon):
                 "rating_id": False,
                 "reactions": [],
                 "record_name": "Visitor Ernest Employee",
+                "reply_to": '"Public user" <catchall.test@test.mycompany.com>',
                 "res_id": channel.id,
                 "scheduledDatetime": False,
                 "starred": False,

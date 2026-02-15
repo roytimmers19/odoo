@@ -32,7 +32,14 @@ SALE_ORDER_STATE = [
 
 class SaleOrder(models.Model):
     _name = 'sale.order'
-    _inherit = ['portal.mixin', 'product.catalog.mixin', 'mail.thread', 'mail.activity.mixin', 'utm.mixin', 'account.document.import.mixin']
+    _inherit = [
+        'account.document.import.mixin',
+        'mail.activity.mixin',
+        'mail.thread.subject.suggested',
+        'portal.mixin',
+        'product.catalog.mixin',
+        'utm.mixin',
+    ]
     _description = "Sales Order"
     _order = 'date_order desc, id desc'
     _check_company_auto = True
@@ -1543,6 +1550,7 @@ class SaleOrder(models.Model):
             'campaign_id': self.campaign_id.id,
             'medium_id': self.medium_id.id,
             'source_id': self.source_id.id,
+            'utm_reference': f'{self.utm_reference._name},{self.utm_reference.id}' if self.utm_reference else False,
             'team_id': self.team_id.id,
             'partner_id': self.partner_invoice_id.id,
             'partner_shipping_id': self.partner_shipping_id.id,

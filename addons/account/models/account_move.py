@@ -3799,7 +3799,7 @@ class AccountMove(models.Model):
         if self.env.su:
             return
         is_user_able_to_supervise = self.env.user.has_group('account.group_account_manager')
-        is_user_able_to_review = self.env.user.has_group('account.group_account_user')
+        is_user_able_to_review = self.env.user.has_group('account.group_account_user') or is_user_able_to_supervise
         for vals in vals_list:
             if (
                 ((vals.get('review_state') == 'reviewed' or not vals.get('review_state', True)) and not is_user_able_to_review)
@@ -4854,7 +4854,7 @@ class AccountMove(models.Model):
 
         if new and res:
             try:
-                attachments = self._from_files_data(files_data + self._unwrap_attachments(files_data))
+                attachments = set(self.attachment_ids + self._from_files_data(files_data + self._unwrap_attachments(files_data)))
                 self.journal_id._notify_invoice_subscribers(
                     invoice=self,
                     mail_params={

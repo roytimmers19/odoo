@@ -344,7 +344,7 @@ class TestBaseAPIPerformance(BaseMailPerformance):
             # voip module read activity_type during create leading to one less query in enterprise on action_feedback
             _category = activity.activity_type_id.category
 
-        with self.assertQueryCount(admin=9, employee=9):  # tm: 7 / 7
+        with self.assertQueryCount(admin=10, employee=10):  # tm: 7 / 7
             activity.action_feedback(feedback='Zizisse Done !')
 
     @warmup
@@ -379,7 +379,7 @@ class TestBaseAPIPerformance(BaseMailPerformance):
 
         record.write({'name': 'Dupe write'})
 
-        with self.assertQueryCount(admin=12, employee=12):  # tm: 10 / 10
+        with self.assertQueryCount(admin=13, employee=13):  # tm: 10 / 10
             record.action_close('Dupe feedback')
 
         self.assertEqual(record.activity_ids, self.env['mail.activity'])
@@ -405,7 +405,7 @@ class TestBaseAPIPerformance(BaseMailPerformance):
 
         record.write({'name': 'Dupe write'})
 
-        with self.assertQueryCount(admin=14, employee=14):  # tm: 12 / 12
+        with self.assertQueryCount(admin=15, employee=15):  # tm: 12 / 12
             record.action_close('Dupe feedback', attachment_ids=attachments.ids)
 
         # notifications
@@ -1010,6 +1010,13 @@ class TestMailAPIPerformance(BaseMailPerformance):
         records = self.test_records_recipients.with_env(self.env)
         with self.assertQueryCount(employee=28):  # tm: 21
             _recipients = records._message_get_suggested_recipients_batch(no_create=False)
+
+    @users('employee')
+    @warmup
+    def test_message_get_suggested_subject_batch(self):
+        records = self.test_records_recipients.with_env(self.env)
+        with self.assertQueryCount(employee=4):  # tm: 4
+            _recipients = records._message_get_suggested_subject_batch()
 
     @mute_logger('odoo.tests', 'odoo.addons.mail.models.mail_mail', 'odoo.models.unlink')
     @users('admin', 'employee')
@@ -1622,6 +1629,7 @@ class TestMessageToStorePerformance(BaseMailPerformance):
                                         "rating_id": False,
                                         "reactions": [],
                                         "record_name": "Test",
+                                        "reply_to": '"OdooBot" <catchall.test@test.mycompany.com>',
                                         "res_id": record.id,
                                         "scheduledDatetime": False,
                                         "starred": False,
@@ -1736,6 +1744,7 @@ class TestMessageToStorePerformance(BaseMailPerformance):
                                         "reactions": [],
                                         "record_name": "Test",
                                         "res_id": record.id,
+                                        "reply_to": '"OdooBot" <catchall.test@test.mycompany.com>',
                                         "scheduledDatetime": False,
                                         "starred": False,
                                         "subject": False,
