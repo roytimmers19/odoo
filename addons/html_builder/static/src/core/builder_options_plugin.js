@@ -6,6 +6,8 @@ import { isClonable } from "./clone_plugin";
 import { getElementsWithOption, isElementInViewport } from "@html_builder/utils/utils";
 import { OptionsContainer } from "@html_builder/sidebar/option_container";
 import { shouldEditableMediaBeEditable } from "@html_builder/utils/utils_css";
+import { _t } from "@web/core/l10n/translation";
+import { closestElement } from "@html_editor/utils/dom_traversal";
 
 /** @typedef {import("@html_builder/core/utils").BaseOptionComponent} BaseOptionComponent */
 /** @typedef {import("@odoo/owl").Component} Component */
@@ -43,6 +45,7 @@ import { shouldEditableMediaBeEditable } from "@html_builder/utils/utils_css";
 /**
  * @typedef { Object } BuilderOptionsShared
  * @property { BuilderOptionsPlugin['checkElement'] } checkElement
+ * @property { BuilderOptionsPlugin['closestWithOption'] } closestWithOption
  * @property { BuilderOptionsPlugin['computeContainers'] } computeContainers
  * @property { BuilderOptionsPlugin['findOption'] } findOption
  * @property { BuilderOptionsPlugin['getContainers'] } getContainers
@@ -115,6 +118,7 @@ export class BuilderOptionsPlugin extends Plugin {
     static dependencies = ["operation", "history"];
     static shared = [
         "checkElement",
+        "closestWithOption",
         "computeContainers",
         "findOption",
         "getContainers",
@@ -140,6 +144,17 @@ export class BuilderOptionsPlugin extends Plugin {
                 const el = this.editable.querySelector(this.config.initialTarget);
                 this.updateContainers(el);
             }
+        },
+        get_options_container_top_buttons: (el) => {
+            const buttons = [];
+            if (el.matches("section")) {
+                buttons.push({
+                    class: "fa fa-fw fa-crosshairs btn o-hb-btn btn-accent-color-hover",
+                    title: _t("Select only this block"),
+                    handler: (el) => this.updateContainers(el),
+                });
+            }
+            return buttons;
         },
     };
 
@@ -305,6 +320,14 @@ export class BuilderOptionsPlugin extends Plugin {
         this.dispatchTo("change_current_options_containers_listeners", this.lastContainers);
     }
 
+    closestWithOption(el) {
+        return closestElement(el, (el) =>
+            this.builderOptions.some(
+                (Option) => el.matches(Option.selector) && this.checkElement(el, Option)
+            )
+        );
+    }
+
     computeContainers(target) {
         const mapElementsToOptions = (Options) => {
             const map = new Map();
@@ -343,12 +366,18 @@ export class BuilderOptionsPlugin extends Plugin {
             element = element.parentElement;
         }
 
-        const previousElementToIdMap = new Map(this.lastContainers.map((c) => [c.element, c.id]));
+        const previousElementToIdAndStateMap = new Map(
+            this.lastContainers.map((c) => [c.element, { id: c.id, folded: c.folded }])
+        );
+        const keepUnfolded = this.lastContainers.some((c) => c.element === element);
         let containers = reactive(
             [...elementToOptions]
                 .sort(([a], [b]) => (b.contains(a) ? 1 : -1))
                 .map(([element, Options]) => ({
-                    id: previousElementToIdMap.get(element) || uniqueId(),
+                    id: previousElementToIdAndStateMap.get(element)?.id || uniqueId(),
+                    folded: keepUnfolded
+                        ? previousElementToIdAndStateMap.get(element)?.folded ?? true
+                        : true,
                     element,
                     options: Options,
                     optionTitleComponents: elementToOptionTitleComponents.get(element) || [],
@@ -370,6 +399,10 @@ export class BuilderOptionsPlugin extends Plugin {
         );
         if (lastValidContainerIdx > 0) {
             containers = containers.slice(lastValidContainerIdx);
+        }
+        const lastContainerWthOptions = containers.findLast((c) => c.options.length);
+        if (lastContainerWthOptions) {
+            lastContainerWthOptions.folded = false;
         }
         return containers;
     }
