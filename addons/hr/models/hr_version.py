@@ -66,7 +66,6 @@ class HrVersion(models.Model):
         help="Enter the employee's National Identification Number issued by the government (e.g., Aadhaar, SIN, NIN). This is used for official records and statutory compliance.",
         groups="hr.group_hr_user",
         tracking=1)
-    ssnid = fields.Char('Social Security No', groups="hr.group_hr_user", tracking=1)
     passport_id = fields.Char('Passport No', groups="hr.group_hr_user", tracking=1)
     passport_expiration_date = fields.Date('Passport Expiration Date', groups="hr.group_hr_user", tracking=1)
     sex = fields.Selection([
@@ -499,12 +498,6 @@ class HrVersion(models.Model):
             employee = user_employees.filtered(lambda r: r.company_id == user.company_id) or user_employees[:1]
         return employee
 
-    @api.constrains('ssnid')
-    def _check_ssnid(self):
-        # By default, a Social Security Number is always valid, but each localization
-        # may want to add its own constraints
-        pass
-
     @api.depends_context('uid', 'company')
     @api.depends('department_id')
     def _compute_part_of_department(self):
@@ -634,10 +627,11 @@ class HrVersion(models.Model):
         return self.tz or self.employee_id.user_partner_id.tz or self.employee_id.company_id.tz or 'UTC'
 
     def _get_resources_per_tz(self):
-        resources_per_tz = defaultdict(lambda: self.env['resource.resource'])
-        for version in self:
-            resources_per_tz[ZoneInfo(version._get_tz())] |= version.employee_id.resource_id
-        return dict(resources_per_tz)
+        version_per_tz = self.grouped(lambda e: ZoneInfo(e._get_tz()))
+        return {
+            tz: versions.employee_id.resource_id
+            for tz, versions in version_per_tz.items()
+        }
 
     def action_open_version(self):
         self.ensure_one()
