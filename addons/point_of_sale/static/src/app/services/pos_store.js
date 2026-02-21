@@ -1497,7 +1497,7 @@ export class PosStore extends WithLazyGetterTrap {
         for (const order of orders) {
             const context = this.getSyncAllOrdersContext([order], options);
             await this.preSyncAllOrders([order]);
-            this.syncingOrders.add(order.id);
+            this.syncingOrders.add(order.uuid);
 
             try {
                 const serialized = order.serializeForORM();
@@ -2656,8 +2656,7 @@ export class PosStore extends WithLazyGetterTrap {
     }
 
     get isSelectedLineCombo() {
-        const selectedOrderline = this.selectedOrder.getSelectedOrderline();
-        return selectedOrderline && selectedOrderline.isPartOfCombo();
+        return Boolean(this.selectedOrder?.getSelectedOrderline()?.isPartOfCombo());
     }
 
     /**
