@@ -135,7 +135,11 @@ export function makeActionManager(env, router = _router) {
 
     rpcBus.addEventListener("RPC:RESPONSE", async (ev) => {
         const { model, method } = ev.detail.data.params;
-        if (model === "ir.actions.act_window" && UPDATE_METHODS.includes(method)) {
+        if (
+            model === "ir.actions.act_window" &&
+            UPDATE_METHODS.includes(method) &&
+            !ev.detail.error
+        ) {
             rpcBus.trigger("CLEAR-CACHES", "/web/action/load");
             const virtualStack = await _controllersFromState(router.current);
             const nextStack = [...virtualStack, controllerStack[controllerStack.length - 1]];
