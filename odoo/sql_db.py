@@ -265,8 +265,8 @@ class Cursor(_CursorProtocol):
         self._closed = False   # real initialization value
 
         if os.getenv('ODOO_FAKETIME_TEST_MODE') and self.dbname in tools.config['db_name']:
-            self.execute("SET search_path = public, pg_catalog;")
-            self.commit()  # ensure that the search_path remains after a rollback
+            self._obj.execute("SET SESSION search_path = public, pg_catalog;")
+            self._cnx.commit()  # ensure that the search_path remains after a rollback
 
     def flush(self) -> None:
         """ Flush the current transaction, and run precommit hooks. """
@@ -481,6 +481,11 @@ class Cursor(_CursorProtocol):
 
             self.cache.clear()
 
+        except psycopg2.InterfaceError:
+            # mask 'connection already closed' error
+            if not self._cnx.closed:
+                raise
+
         finally:
             # The connection may have been closed, so give it back in finally block.
             self._closed = True
@@ -686,11 +691,10 @@ class ConnectionPool:
                 cnx.close()
                 last = self._free_connections.pop(i)
                 count += 1
-        for cnx in list(self._used_connections):
+        for cnx in self._used_connections:
             if dsn is None or self._dsn_equals(cnx.dsn, dsn):
                 cnx.close()
                 last = cnx
-                self._used_connections.discard(cnx)
                 count += 1
         if count:
             _logger.info('%r: Closed %d connections %s', self, count,
