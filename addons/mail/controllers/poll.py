@@ -36,7 +36,7 @@ class PollController(ThreadController):
         # sudo - mail.poll: internal user can create poll on an accessible thread.
         poll = self.env["mail.poll"].sudo().create(poll_values)
         self.env.ref("mail.ir_cron_mail_end_polls")._trigger(end_dt)
-        Store(**thread._store_target()).add(poll, "_store_poll_fields").bus_send()
+        Store(*thread._store_target()).add(poll, "_store_poll_fields").bus_send()
         return poll.id
 
     @mail_route("/mail/poll/end", type="jsonrpc", auth="user", methods=["POST"])
@@ -79,7 +79,7 @@ class PollController(ThreadController):
         )
         self_bus_channel = guest if self.env.user._is_public() else self.env.user
         Store(bus_channel=self_bus_channel).add(options_sudo, ["selected_by_self"]).bus_send()
-        store = Store(**thread._store_target())
+        store = Store(*thread._store_target())
         store.add(options_sudo.poll_id.option_ids, ["number_of_votes", "vote_percentage"])
         store.add(vote, "_store_vote_fields")
         store.bus_send()
@@ -105,7 +105,7 @@ class PollController(ThreadController):
         thread = self.env[options_sudo.poll_id.start_message_id.model].browse(
             options_sudo.poll_id.start_message_id.res_id
         )
-        store = Store(**thread._store_target())
+        store = Store(*thread._store_target())
         store.add(poll_sudo.option_ids, ["number_of_votes", "vote_percentage"])
         store.add(
             options_sudo,
