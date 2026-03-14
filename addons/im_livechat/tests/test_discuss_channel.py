@@ -104,13 +104,13 @@ class TestDiscussChannel(TestImLivechatCommon, TestGetOperatorCommon, MailCase):
             "operator_non_member",
             groups="base.group_user,im_livechat.im_livechat_group_user",
         )
-        self.livechat_channel.user_ids |= operator
         data = self.make_jsonrpc_request(
             "/im_livechat/get_session",
             {"channel_id": self.livechat_channel.id},
         )
+        self.livechat_channel.user_ids |= operator
         channel = self.env["discuss.channel"].browse(data["channel_id"])
-        self.assertNotIn(operator.partner_id, channel.channel_member_ids.partner_id)
+        self.assertNotIn(operator.partner_id, channel.livechat_agent_partner_ids)
         self.assertTrue(operator.has_access_livechat)
         channel.with_user(operator).channel_change_description("Updated by non-member operator")
         self.assertEqual(channel.description, "Updated by non-member operator")
@@ -249,7 +249,7 @@ class TestDiscussChannel(TestImLivechatCommon, TestGetOperatorCommon, MailCase):
         channel_history = channel.with_user(self.visitor_user)._get_channel_history()
         self.assertEqual(
             channel_history,
-            "<br/><strong>Michel Operator:</strong><br/>Operator Here<br/>%(attachment_1)s<br/>"
+            "<strong>Michel Operator:</strong><br/>Operator Here<br/>%(attachment_1)s<br/>"
             "<br/><strong>Rajesh:</strong><br/>Visitor Here<br/>%(attachment_2)s<br/>"
             % {
                 "attachment_1": _convert_attachment_to_html(attachment1),
