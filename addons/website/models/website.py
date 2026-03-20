@@ -1581,7 +1581,7 @@ class Website(models.CachedModel):
         if not force:
             domain += [
                 ('website_indexed', '=', True),
-                ('visibility', 'in', (False, '')),
+                ('visibility', '=', 'public'),
                 ('website_published', '=', True),
             ]
 
