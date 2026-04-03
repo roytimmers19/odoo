@@ -19,7 +19,7 @@
         >
             <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
             <div class="input-group w-100">
-                <input name="promo" class="form-control" type="text" placeholder="Discount code..." t-att-value="website_sale_order.pricelist_id.code or None"/>
+                <input name="promo" class="form-control" type="text" placeholder="Discount code..."/>
                 <button type="submit" class="btn btn-light border">Apply</button>
             </div>
         </form>
@@ -379,7 +379,7 @@
                                 <span class="text-wrap" t-out="line._get_line_header()"/>
                                 <p class="text-muted small mb-0" t-out="line._get_combination_name()"/>
                                 <span
-                                    t-if="line.product_template_id._has_multiple_uoms()"
+                                    t-if="line.product_id._has_multiple_uoms()"
                                     class="badge mt-1 bg-light"
                                     t-out="line.product_uom_id.name"
                                 />
@@ -492,8 +492,7 @@
             <tr t-if="not hide_promotions">
                 <td colspan="3" class="text-end text-xl-end border-0 p-0">
                 <span>
-                    <t t-set="force_coupon" t-value="website_sale_order.pricelist_id.code"/>
-                    <div t-if="not force_coupon" class="coupon_form">
+                    <div class="coupon_form">
                         <t t-call="website_sale.coupon_form"/>
                     </div>
                 </span>
