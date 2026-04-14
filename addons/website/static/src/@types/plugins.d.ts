@@ -5,7 +5,6 @@ declare module "plugins" {
     import { WebsiteFontShared } from "@website/builder/plugins/font/font_plugin";
     import { FormOptionShared } from "@website/builder/plugins/form/form_option_plugin";
     import { ImageHoverShared } from "@website/builder/plugins/image/image_hover_plugin";
-    import { AddElementOptionShared } from "@website/builder/plugins/layout_option/add_element_option_plugin";
     import { MenuDataShared } from "@website/builder/plugins/menu_data_plugin";
     import { can_have_hover_effect_predicates } from "@website/builder/plugins/options/animate_option";
     import { AnimateOptionShared, on_hover_animation_mode_cleaned_handlers, on_hover_animation_mode_applied_handlers } from "@website/builder/plugins/options/animate_option_plugin";
@@ -34,10 +33,10 @@ declare module "plugins" {
     import { TranslateWebpageOptionShared } from "@website/builder/plugins/translation/options/translate_webpage_option_plugin";
     import { on_nodes_marked_translatable_handlers } from "@website/builder/plugins/translation/translation_plugin";
     import { WebsiteSaveShared } from "@website/builder/plugins/website_save_plugin";
+    import { force_background_translation_state_selectors } from "@website/builder/plugins/translation/repeat_translation_state_plugin";
     import { WebsiteSessionShared } from "@website/builder/plugins/website_session_plugin";
 
     interface SharedMethods {
-        addElementOption: AddElementOptionShared;
         animateOption: AnimateOptionShared;
         carouselOption: CarouselOptionShared;
         cardImageOption: CardImageOptionShared;
@@ -95,6 +94,7 @@ declare module "plugins" {
 
         // Data
         searchbar_option_order_by_items: searchbar_option_order_by_items;
+        force_background_translation_state_selectors: force_background_translation_state_selectors;
         theme_options: theme_options;
         visibility_selector_parameters: visibility_selector_parameters;
     }

@@ -142,6 +142,7 @@ TAX_EXEMPTION_MAPPING = {
     'VATEX-EU-132-1O': 'Exempt based on article 132, section 1 (o) of Council Directive 2006/112/EC',
     'VATEX-EU-132-1P': 'Exempt based on article 132, section 1 (p) of Council Directive 2006/112/EC',
     'VATEX-EU-132-1Q': 'Exempt based on article 132, section 1 (q) of Council Directive 2006/112/EC',
+    'VATEX-EU-135-1': 'Exempt based on article 135, section 1 of Council Directive 2006/112/EC',
     'VATEX-EU-143': 'Exempt based on article 143 of Council Directive 2006/112/EC',
     'VATEX-EU-143-1A': 'Exempt based on article 143, section 1 (a) of Council Directive 2006/112/EC',
     'VATEX-EU-143-1B': 'Exempt based on article 143, section 1 (b) of Council Directive 2006/112/EC',
@@ -965,7 +966,7 @@ class AccountEdiCommon(models.AbstractModel):
         charges = []
         discount_amount = 0
         for allowance_charge_node in tree.iterfind(xpath_dict['allowance_charge']):
-            charge_indicator = allowance_charge_node.findtext(xpath_dict['allowance_charge_indicator'])
+            charge_indicator = allowance_charge_node.findtext(xpath_dict['allowance_charge_indicator']) or 'false'
             amount = float(allowance_charge_node.findtext(xpath_dict['allowance_charge_amount'], default='0'))
             reason_code = allowance_charge_node.findtext(xpath_dict['allowance_charge_reason_code'], default='')
             reason = allowance_charge_node.findtext(xpath_dict['allowance_charge_reason'], default='')
@@ -1095,7 +1096,11 @@ class AccountEdiCommon(models.AbstractModel):
         #   * unit price = 1, qty = 0, but price_subtotal = -200
         # for instance, when filling a down payment as an document line. The equation in the docstring is not
         # respected, and the result will not be correct, so we just follow the simple rule below:
-        if net_price_unit is not None and float_compare(price_subtotal, net_price_unit * (delivered_qty / basis_qty) - allow_charge_amount, currency.decimal_places):
+        if (
+            net_price_unit is not None
+            and price_subtotal is not None
+            and float_compare(price_subtotal, net_price_unit * (delivered_qty / basis_qty) - allow_charge_amount, currency.decimal_places)
+        ):
             if net_price_unit == 0 and delivered_qty == 0:
                 quantity = 1
                 price_unit = price_subtotal
@@ -1140,12 +1145,13 @@ class AccountEdiCommon(models.AbstractModel):
             #   'parent_node_path': 'path to the parent node',
             #   'condition': lambda parent_node, node, value: 'where parent_node = parent node, node = node containing VIN Number, value = identifier',
             #   'value_path': 'path to the node where the information is to be found',
-            #   'identifier': 'to be used in condition to perform a check, inner tex of a node allowing to identify the node to read',
+            #   'identifier': 'to be used in condition to perform a check, inner text of a node allowing to identify the node to read',
             #   'linked_field': the field to search in DB (vin_sn, license_plate),
             #   'pattern': if the value to search is not in a field specific to it (with other words like in a description)
             # }
             {'path_type': 'line', 'identifier': 'SerialNumber'},  # VIN in AdditionalItemProperty/Value with AdditionalItemProperty/Name == 'SerialNumber'
             {'path_type': 'line', 'identifier': 'VIN'},  # VIN in AdditionalItemProperty/Value with AdditionalItemProperty/Name == 'VIN'
+            {'path_type': 'line', 'identifier': 'PlateNumber', 'linked_field': 'license_plate'},  # LICENSE PLATE in AdditionalItemProperty/Value with AdditionalItemProperty/Name == 'PlateNumber'
             {
                 # VIN in Item/Description
                 'path_type': 'line',
@@ -1287,6 +1293,9 @@ class AccountEdiCommon(models.AbstractModel):
         """
         charges_vals = []
         for charge in line_values.pop('charges'):
+            if not charge['line_quantity']:
+                continue
+
             if charge['reason_code'] == 'AEO':
                 # a 1 eur fixed tax on a line with quantity=2 will yield an AllowanceCharge with amount = 2
                 charge_copy = charge.copy()
@@ -1296,12 +1305,12 @@ class AccountEdiCommon(models.AbstractModel):
                     if tax.price_include:
                         line_values['price_unit'] += tax.amount
                     continue
-            charges_vals.append([
-                charge['reason_code'] + " " + charge['reason'],
-                1,
-                charge['amount'],
-                taxes,
-            ])
+
+            price_subtotal_before = line_values['price_unit'] * charge['line_quantity'] * (1.0 - line_values['discount'] / 100.0)
+            price_subtotal_after = price_subtotal_before + charge['amount']
+            line_values['price_unit'] += charge['amount'] / charge['line_quantity']
+            new_price_subtotal_before_discount = line_values['price_unit'] * charge['line_quantity']
+            line_values['discount'] = (1 - (price_subtotal_after / new_price_subtotal_before_discount)) * 100.0
         return record._get_line_vals_list(charges_vals)
 
     def _get_document_allowance_charge_xpaths(self):
