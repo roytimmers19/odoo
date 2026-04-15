@@ -79,6 +79,7 @@ BYPASS_LOCK_CHECK = object()
 
 class AccountMove(models.Model):
     _name = 'account.move'
+    _explanation = "The core model for financial accounting (journal entries, invoices, bills). Each record represents a transaction between the company and another party, or internal financial adjustments."
     _inherit = ['portal.mixin', 'mail.thread.main.attachment', 'mail.activity.mixin', 'sequence.mixin', 'product.catalog.mixin', 'account.document.import.mixin']
     _description = "Journal Entry"
     _order = 'date desc, name desc, invoice_date desc, id desc'
@@ -752,7 +753,9 @@ class AccountMove(models.Model):
         groups="account.group_account_invoice,account.group_account_readonly",
     )
     duplicated_ref_ids = fields.Many2many(comodel_name='account.move', compute='_compute_duplicated_ref_ids')
+    # used to check if any moves in duplicated_ref_ids are in the 'Draft' state.
     is_draft_duplicated_ref_ids = fields.Boolean(compute="_compute_is_draft_duplicated_ref_ids")
+    is_exact_move_duplicate = fields.Boolean(compute='_compute_is_draft_duplicated_ref_ids')
     need_cancel_request = fields.Boolean(compute='_compute_need_cancel_request')
 
     show_update_fpos = fields.Boolean(string="Has Fiscal Position Changed", store=False)  # True if the fiscal position was changed
@@ -2093,7 +2096,7 @@ class AccountMove(models.Model):
             move.duplicated_ref_ids = move_to_duplicate_move.get(move._origin, self.env['account.move'])
 
     def _duplicated_ref_ids_depends(self):
-        return ["ref", "move_type", "partner_id", "invoice_date", "tax_totals"]
+        return ["ref", "move_type", "partner_id", "invoice_date", "tax_totals", "currency_id"]
 
     def _fetch_duplicate_reference(self, matching_states=('draft', 'posted')):
         moves = self.filtered(lambda m: m.is_sale_document() or m.is_purchase_document())
@@ -2140,6 +2143,7 @@ class AccountMove(models.Model):
                    AND move.id != duplicate_move.id
                    AND duplicate_move.state IN %(matching_states)s
                    AND move.move_type = duplicate_move.move_type
+                   AND move.currency_id = duplicate_move.currency_id
                    AND (%(move_type_sql_condition)s)
                  WHERE move.id IN %(moves)s
                  GROUP BY move.id
@@ -2208,6 +2212,15 @@ class AccountMove(models.Model):
     def _compute_is_draft_duplicated_ref_ids(self):
         for move in self:
             move.is_draft_duplicated_ref_ids = any(duplicate_move.state == 'draft' for duplicate_move in move.duplicated_ref_ids)
+            move.is_exact_move_duplicate = any(
+                move.ref and move.ref == dup.ref
+                and move.move_type == dup.move_type
+                and move.partner_id == dup.partner_id
+                and move.invoice_date == dup.invoice_date
+                and move.amount_total == dup.amount_total
+                and move.is_purchase_document()
+                for dup in move.duplicated_ref_ids
+            )
 
     @api.depends('company_id')
     def _compute_display_qr_code(self):
@@ -5279,13 +5292,16 @@ class AccountMove(models.Model):
         self.ensure_one()
         if self.env.context.get('name_as_amount_total'):
             currency_amount = self.currency_id.format(self.amount_total)
-            if self.state == 'posted':
+            if self.is_sale_document(include_receipts=True) and self.state == "posted":
                 ref = f" - {self.ref}" if self.ref else ""
                 return _("%(name)s%(ref)s at %(currency_amount)s", name=(self.name), ref=ref, currency_amount=currency_amount)
-            if self.name:
-                return _("%(name)s - Draft at (%(currency_amount)s)", name=(self.name), currency_amount=currency_amount)
-            else:
-                return _("Draft (%(currency_amount)s)", currency_amount=currency_amount)
+            label = (self.ref or self.name or "") if self.is_purchase_document(include_receipts=True) else (self.name or "")
+            if label:
+                if self.state == 'draft':
+                    return _("%(label)s at %(currency_amount)s (Draft)", label=label, currency_amount=currency_amount)
+                return _("%(label)s at %(currency_amount)s", label=label, currency_amount=currency_amount)
+            return _("Draft (%(currency_amount)s)", currency_amount=currency_amount)
+
         name = ''
         if self.state == 'draft':
             name += {
@@ -5580,19 +5596,17 @@ class AccountMove(models.Model):
         :param reverse_moves:       An account.move recordset, reverse of the current self.
         :return:                    An account.move recordset, reverse of the current self.
         '''
+        reconciliation_plan = []
         for move, reverse_move in zip(self, reverse_moves):
             group = (move.line_ids + reverse_move.line_ids) \
-                .filtered(lambda l: not l.reconciled) \
-                .sorted(lambda l: l.account_type not in ('asset_receivable', 'liability_payable')) \
+                .filtered(lambda l: not l.reconciled and (
+                    l.is_account_reconcile or
+                    l.move_id.tax_cash_basis_origin_move_id
+                )) \
                 .grouped(lambda l: (l.account_id, l.currency_id))
-            for (account, _currency), lines in group.items():
-                if (
-                    all(not line.reconciled for line in lines) # if it was reconciled due to a previous group
-                    and account.reconcile or account.account_type in ('asset_cash', 'liability_credit_card')
-                ):
-                    lines.with_context(move_reverse_cancel=move_reverse_cancel).reconcile()
+            reconciliation_plan.extend(group.values())
+        self.env['account.move.line'].with_context(move_reverse_cancel=move_reverse_cancel)._reconcile_plan(reconciliation_plan)
         return reverse_moves
-
 
     def _reverse_moves(self, default_values_list=None, cancel=False):
         ''' Reverse a recordset of account.move.
@@ -6266,7 +6280,7 @@ class AccountMove(models.Model):
         '''
         self.ensure_one()
         partial = self.env['account.partial.reconcile'].browse(partial_id)
-        return partial.unlink()
+        (partial.credit_move_id + partial.debit_move_id).remove_move_reconcile()
 
     def check_selected_moves(self):
         self.env['account.move'].browse(self.env.context.get('active_ids', [])).set_moves_checked()

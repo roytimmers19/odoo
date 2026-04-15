@@ -17,6 +17,7 @@ PROCUREMENT_PRIORITIES = [('0', 'Normal'), ('1', 'Urgent')]
 class StockMove(models.Model):
     _name = 'stock.move'
     _description = "Stock Move"
+    _explanation = "Represents a request or a completed action to move a specific quantity of a product from a source location to a destination location. These are the lines that make up a stock.picking."
     _order = 'sequence, id'
     _rec_name = 'reference'
 
@@ -1088,7 +1089,7 @@ Please change the quantity done or the rounding precision in your settings.""",
             vals_list.append({**default_vals,
                              **lot,
                              'location_dest_id': putaway_loc_dest.id,
-                             'uom_id': product.uom_id.id,
+                             'uom_id': default_vals.get('uom_id', product.uom_id.id),
                             })
         if default_vals.get('picking_type_id'):
             picking_type = self.env['stock.picking.type'].browse(default_vals['picking_type_id'])

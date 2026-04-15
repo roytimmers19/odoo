@@ -22,7 +22,9 @@ class ProductFeed(models.Model):
     _description = "Product Feed"
 
     name = fields.Char(required=True)
-    website_id = fields.Many2one("website", required=True)
+    website_id = fields.Many2one(
+        "website", required=True, default=lambda self: self.env.company.website_id
+    )
     pricelist_id = fields.Many2one(
         "product.pricelist",
         help="Specify a pricelist to localize the feed with a specific currency."
@@ -132,7 +134,7 @@ class ProductFeed(models.Model):
             self.cache_expiry = fields.Datetime.today() + relativedelta(days=1)
             return compressed_gmc_xml  # Avoid encoding and directly decoding
 
-        return self.feed_cache
+        return self.feed_cache.content
 
     def _render_gmc_feed(self):
         """Render the Google Merchant Center feed.
