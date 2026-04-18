@@ -904,7 +904,7 @@ class ProductTemplate(models.Model):
                     %s
                 </p>
                 <p>
-                    <a class="oe_link" href="https://www.odoo.com/documentation/latest/_downloads/c2c6ce32294dfddffcfefcf2775f7a09/pdfquotebuilderexamples.zip">
+                    <a class="oe_link" href="https://www.odoo.com/documentation/latest/_downloads/eaa2883bd361273b475c9765f64e3e0c/pdfquotebuilderexamples.zip">
                     %s
                     </a>
                 </p>
@@ -1708,15 +1708,24 @@ class ProductTemplate(models.Model):
     def _has_multiple_uoms(self) -> bool:
         if self.type == 'combo':
             return False
-        return self.env['res.groups']._is_feature_enabled('uom.group_uom') and len(
-            self._get_available_uoms()
-        ) > 1
+        return len(self._get_available_uoms()) > 1
 
     def _get_available_uoms(self):
         if not self:
             return self.env['uom.uom']
         self.ensure_one()
+        if not self.env['res.groups']._is_feature_enabled('uom.group_uom'):
+            # Multi-uom disabled, only main product uom matters.
+            return self.uom_id
         return self.uom_id | self.uom_ids
+
+    def _get_main_uom(self):
+        """Return the default uom configured on the product.
+
+        :returns: the main uom of the product
+        :rtype: `uom.uom` recordset
+        """
+        return self.uom_id
 
     ###################
     # DEMO DATA SETUP #
