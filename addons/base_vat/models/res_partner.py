@@ -81,6 +81,7 @@ _ref_vat = {
     'tr': _lt('11111111111 (NIN) or 2222222222 (VKN)'),
     'ua': _lt('12345678 or UA12345678 (EDRPOU), 1234567890 (RNOPP) or 123456789012 (IPN)'),
     'uy': _lt("Example: '219999830019' (format: 12 digits, all numbers, valid check digit)"),
+    'uz': _lt('XXXXXXXXX [9 digits]'),
     've': 'V-12345678-1, V123456781, V-12.345.678-1',
     'xi': 'XI123456782',
     'sa': _lt('310175397400003 [Fifteen digits, first and last digits should be "3"]'),
@@ -99,8 +100,6 @@ class ResPartner(models.Model):
     # Field representing whether vies_valid is relevant for selecting a fiscal position on this partner
     perform_vies_validation = fields.Boolean(compute='_compute_perform_vies_validation')
     # We put on inverse because a compute with a dependency to itself is not well managed in the ORM (it should be triggered first)
-    country_id = fields.Many2one(inverse="_inverse_vat", store=True)
-    vat = fields.Char(inverse="_inverse_vat", store=True)
 
     @api.model
     def _run_vat_checks(self, country, vat, partner_name='', validation='error'):
@@ -161,13 +160,6 @@ class ResPartner(models.Model):
             else:
                 return '', code_to_check
         return vat_to_return, code_to_check
-
-    def _inverse_vat(self):
-        self._check_vat()
-
-    @api.onchange('vat', 'country_id')
-    def _onchange_vat(self):
-        self._check_vat(validation=False)
 
     @api.depends_context('company')
     @api.depends('vat')
@@ -655,6 +647,9 @@ class ResPartner(models.Model):
             and vat[-1] == calc_check_digit(vat)  # Invalid Check Digit
         )
 
+    def check_vat_uz(self, vat):
+        return len(vat) == 9 and vat.isdigit()
+
     def check_vat_ve(self, vat):
         # https://tin-check.com/en/venezuela/
         # https://techdocs.broadcom.com/us/en/symantec-security-software/information-security/data-loss-prevention/15-7/About-content-packs/What-s-included-in-Content-Pack-2021-02/Updated-data-identifiers-in-Content-Pack-2021-02/venezuela-national-identification-number-v115451096-d327e108002-CP2021-02.html
@@ -848,7 +843,7 @@ class ResPartner(models.Model):
         own validation to support these new valid UBNs.
         """
         vat = stdnum.util.get_cc_module("tw", "vat").compact(vat)
-        if len(vat) != 8:
+        if len(vat) != 8 or not vat.isdigit():
             return False  # The length is fixed, and we will expect it to be 8 in the following checks.
 
         logic_multiplier = [1, 2, 1, 2, 1, 2, 4, 1]  # This multiplier is set by the official validation logic.

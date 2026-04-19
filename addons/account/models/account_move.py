@@ -640,6 +640,12 @@ class AccountMove(models.Model):
     reversal_move_ids = fields.One2many('account.move', 'reversed_entry_id')
 
     # === Vendor bill fields === #
+    invoice_vendor_bill_id = fields.Many2one(
+        'account.move',
+        store=False,
+        check_company=True,
+        help="Auto-complete from a previous bill or refund.",
+    )
     invoice_source_email = fields.Char(string='Source Email', tracking=True)
     invoice_partner_display_name = fields.Char(compute='_compute_invoice_partner_display_info', store=True)
     is_manually_modified = fields.Boolean()
@@ -1439,7 +1445,10 @@ class AccountMove(models.Model):
     @api.depends('suitable_journal_ids')
     def _compute_show_journal(self):
         for move in self:
-            move.show_journal = len(move.suitable_journal_ids) > 1
+            move.show_journal = (
+                len(move.suitable_journal_ids) > 1
+                or move.journal_id and move.journal_id not in move.suitable_journal_ids
+            )
 
     def _compute_payments_widget_to_reconcile_info(self):
 
@@ -2677,6 +2686,20 @@ class AccountMove(models.Model):
     def _onchange_date(self):
         if not self.is_invoice(True):
             self.line_ids._inverse_amount_currency()
+
+    @api.onchange('invoice_vendor_bill_id')
+    def _onchange_invoice_vendor_bill(self):
+        if self.invoice_vendor_bill_id:
+            # Copy invoice lines.
+            for line in self.invoice_vendor_bill_id.invoice_line_ids:
+                copied_vals = line.copy_data()[0]
+                self.invoice_line_ids += self.env['account.move.line'].new(copied_vals)
+
+            self.currency_id = self.invoice_vendor_bill_id.currency_id
+            self.fiscal_position_id = self.invoice_vendor_bill_id.fiscal_position_id
+
+            # Reset
+            self.invoice_vendor_bill_id = False
 
     @api.onchange('fiscal_position_id')
     def _onchange_fpos_id_show_update_fpos(self):
@@ -5299,8 +5322,10 @@ class AccountMove(models.Model):
         :return:            A string representing the invoice.
         '''
         self.ensure_one()
-        if self.env.context.get('name_as_amount_total'):
-            currency_amount = self.currency_id.format(self.amount_total)
+        display_residual = self.env.context.get('name_as_amount_residual')
+        if self.env.context.get('name_as_amount_total') or display_residual:
+            amount = self.amount_residual if display_residual else self.amount_total
+            currency_amount = self.currency_id.format(amount)
             if self.is_sale_document(include_receipts=True) and self.state == "posted":
                 ref = f" - {self.ref}" if self.ref else ""
                 return _("%(name)s%(ref)s at %(currency_amount)s", name=(self.name), ref=ref, currency_amount=currency_amount)
@@ -6297,9 +6322,6 @@ class AccountMove(models.Model):
         partial = self.env['account.partial.reconcile'].browse(partial_id)
         (partial.credit_move_id + partial.debit_move_id).remove_move_reconcile()
 
-    def check_selected_moves(self):
-        self.env['account.move'].browse(self.env.context.get('active_ids', [])).set_moves_checked()
-
     def set_moves_checked(self, is_checked=True):
         for move in self.filtered(lambda m: m.state == 'posted'):
             move.review_state = 'reviewed' if is_checked else 'todo'
@@ -6315,6 +6337,43 @@ class AccountMove(models.Model):
         self.sending_data = False
 
         self._detach_attachments()
+
+    def action_reset_selected_to_draft(self):
+        if not self:
+            return False
+
+        failed_moves = self.env['account.move']
+        has_reset = False
+        last_error = None
+        for move in self:
+            try:
+                move.button_draft()
+                has_reset = True
+            except UserError as error:
+                failed_moves |= move
+                last_error = error
+
+        if not has_reset and last_error:
+            raise last_error
+
+        if failed_moves:
+            self.env.user.partner_id._bus_send('account_notification', {
+                'type': 'warning',
+                'title': _("Some entries could not be reset to draft"),
+                'message': _(
+                    "%(failed_count)s out of %(total_count)s entries could not be reset to draft.",
+                    failed_count=len(failed_moves),
+                    total_count=len(self),
+                ),
+                'action_button': {
+                    'name': _('Open'),
+                    'action_name': _('Entries in error'),
+                    'model': 'account.move',
+                    'res_ids': failed_moves.ids,
+                },
+            })
+
+        return {'type': 'ir.actions.client', 'tag': 'soft_reload'}
 
     def _get_fields_to_detach(self):
         """"
