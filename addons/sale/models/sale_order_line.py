@@ -620,7 +620,7 @@ class SaleOrderLine(models.Model):
             for line in lines.with_company(company):
                 taxes = None
                 if line.product_id:
-                    taxes = line.product_id.taxes_id._filter_taxes_by_company(company)
+                    taxes = line.product_id.taxes_id._filter_taxes_by_company()
                 if not line.product_id or not taxes:
                     # Nothing to map
                     line.tax_ids = False
@@ -1147,7 +1147,7 @@ class SaleOrderLine(models.Model):
                     or invoice_line.move_id.payment_state == "invoicing_legacy"
                 ):
                     invoice_qty = invoice_line.product_uom_id._compute_quantity(
-                        invoice_line.quantity, line.product_uom_id
+                        invoice_line.quantity, line.product_uom_id, round=False,
                     )
                     if invoice_line.move_id.move_type == "out_invoice":
                         invoiced_qties[line] += invoice_qty
