@@ -20,7 +20,7 @@ import { nbsp } from "@web/core/utils/strings";
 import { Component, onMounted, toRaw } from "@odoo/owl";
 
 import { ActionSwiper } from "@web/core/action_swiper/action_swiper";
-import { isMobileOS } from "@web/core/browser/feature_detection";
+import { hasTouch, isMobileOS } from "@web/core/browser/feature_detection";
 import { Dropdown } from "@web/core/dropdown/dropdown";
 import { useDropdownState } from "@web/core/dropdown/dropdown_hooks";
 import { _t } from "@web/core/l10n/translation";
@@ -36,6 +36,12 @@ import { ActionList } from "@mail/core/common/action_list";
 import { loadCssFromBundle } from "@mail/utils/common/misc";
 import { MessageContextMenu } from "@mail/core/common/message_context_menu";
 import { Priority } from "@mail/core/common/priority";
+
+class MessageDropdown extends Dropdown {
+    get isBottomSheet() {
+        return hasTouch() && this.props.bottomSheet;
+    }
+}
 
 /**
  * @typedef {Object} Props
@@ -60,7 +66,7 @@ export class Message extends Component {
         ActionSwiper,
         AttachmentList,
         Composer,
-        Dropdown,
+        Dropdown: MessageDropdown,
         ImStatus,
         MessageContextMenu,
         MessageInReply,
@@ -115,10 +121,14 @@ export class Message extends Component {
         });
         this.rightClickDropdownState = useDropdownState({
             onClose: async () => {
+                if (this.isRightClickDropdownOngoingClose) {
+                    return; // onClose can be called more than once. Limiting to a single onClose to prevent race-condition in tests.
+                }
                 this.props.messageSelection?.clearSelected();
                 this.isRightClickDropdownOngoingClose = true;
                 await new Promise((resolve) => setTimeout(() => requestAnimationFrame(resolve)));
                 this.isRightClickDropdownOngoingClose = false;
+                delete this.root.el.dataset.rightClicking;
             },
         });
         this.rightClickAnchor = useChildRef("rightClickAnchor");
@@ -502,6 +512,7 @@ export class Message extends Component {
     }
 
     showRightClickMessageActions(ev) {
+        this.root.el.dataset.rightClicking = true;
         const el = this.rightClickAnchor.el;
         el.style.left = ev.clientX + "px";
         el.style.top = ev.clientY + "px";
@@ -534,7 +545,7 @@ export class Message extends Component {
         return this.renderEmbeddedCodeBlocks(bodyEl);
     }
 
-     /** @param {HTMLElement} bodyEl */
+    /** @param {HTMLElement} bodyEl */
     renderEmbeddedCodeBlocks(bodyEl) {
         const { name, Component, getProps } = readonlySyntaxHighlightingEmbedding;
         const selector = `[data-embedded='${name}']`;
