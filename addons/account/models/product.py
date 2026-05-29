@@ -5,6 +5,7 @@ from odoo.exceptions import ValidationError
 from odoo.fields import Domain
 from odoo.tools import format_amount, frozendict
 from odoo.tools.misc import split_every
+from odoo.tools.constants import PREFETCH_MAX
 
 
 ACCOUNT_DOMAIN = "[('account_type', 'not in', ('asset_receivable','liability_payable','asset_cash','liability_credit_card','off_balance'))]"
@@ -332,15 +333,23 @@ class ProductProduct(models.Model):
             except ValueError:
                 similarity_threshold = 0.9
 
-            products = self.search(
+            all_product_ids = self.search(
                 Domain.AND([
                     [('name', 'ilike', name)],
                     values['static_domain'],
                 ]),
-            )
-            for product in products:
-                if SequenceMatcher(None, name.lower(), product.name.lower()).ratio() >= similarity_threshold:
-                    return product
+            ).ids
+            lowered_name = name.lower()
+            for products in split_every(PREFETCH_MAX, all_product_ids, self.browse):
+                products.fetch(['product_tmpl_id'])
+                templates = products.product_tmpl_id
+                templates.fetch(['name'])
+                for product in products:
+                    if SequenceMatcher(None, lowered_name, product.name.lower()).ratio() >= similarity_threshold:
+                        return product
+                products.invalidate_recordset()
+                templates.invalidate_recordset()
+            return self.env['product.product']
 
         if name and '\n' in name:
             # cut Sales Description from the name
@@ -352,32 +361,6 @@ class ProductProduct(models.Model):
             ]}
 
     @api.model
-    def _import_retrieve_product_from_invoice_predictive(self, product_values):
-        # Check if 'account_accountant' is installed.
-        if 'payment_state_before_switch' not in self.env['account.move']._fields:
-            return
-
-        invoice_predictive = product_values.get('invoice_predictive')
-        if not invoice_predictive:
-            return
-
-        def search_predictive(values):
-            static_domain = values['static_domain']
-            predicted_product_id = self.env['account.move.line']._predict_specific_product(
-                move=invoice_predictive['invoice'],
-                name=invoice_predictive['name'],
-                partner=invoice_predictive['partner'],
-            )
-            return self.env['product.product'].browse(predicted_product_id).filtered_domain(static_domain)[:1]
-
-        return {
-            'criteria': [{
-                'search_method': search_predictive,
-                'cache_key': frozendict(invoice_predictive),
-            }],
-        }
-
-    @api.model
     def _import_retrieve_product(self, search_plan, company, product_values_list):
         cache = {}
 
@@ -386,6 +369,8 @@ class ProductProduct(models.Model):
             [('company_id', '=', False)],
         ])
         for product_values in product_values_list:
+            if product_values.get('product'):
+                continue
             product = None
             for plan in search_plan:
                 plan_values = plan(product_values)
