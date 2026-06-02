@@ -26,7 +26,7 @@ from werkzeug.exceptions import BadRequest, HTTPException, ServiceUnavailable
 from werkzeug.local import LocalStack
 
 import odoo
-from odoo import modules
+from odoo import api, modules
 from odoo.http.requestlib import Request
 from odoo.http.response import Response
 from odoo.http.retrying import retrying
@@ -313,13 +313,14 @@ class Websocket:
     # How many seconds between each request.
     RL_DELAY = float(config['websocket_rate_limit_delay'])
 
-    def __init__(self, sock, session, cookies):
+    def __init__(self, sock, session, cookies, prelude=b''):
         # Session linked to the current websocket connection.
         self._session = session
         # Cookies linked to the current websocket connection.
         self._cookies = cookies
         self._db = session.db
         self.__socket = sock
+        self._prelude = prelude and memoryview(prelude)
         self._close_sent = False
         self._close_received = False
         self._timeout_manager = TimeoutManager()
@@ -454,6 +455,11 @@ class Websocket:
         def recv_bytes(n):
             """ Pull n bytes from the socket """
             data = bytearray()
+            if self._prelude:
+                data.extend(self._prelude[:n])
+                self._prelude = self._prelude[n:]
+                if not self._prelude:
+                    self._prelude = b''  # free the bytes
             while len(data) < n:
                 received_data = self.__socket.recv(n - len(data))
                 if not received_data:
@@ -701,12 +707,13 @@ class Websocket:
         if code is CloseCode.SERVER_ERROR:
             reason = None
             registry = Registry(self._session.db)
-            sequence = registry.registry_sequence
-            registry = registry.check_signaling()
-            if sequence != registry.registry_sequence:
+            with registry.cursor() as cr:
+                env = api.Environment(cr, api.SUPERUSER_ID, {})
+                changed_registry = registry is not env.registry
+            if changed_registry:
                 _logger.warning("Bus operation aborted; registry has been reloaded")
             else:
-                _logger.error(exc, exc_info=True)  # noqa: LOG014
+                _logger.error(exc, exc_info=exc)
         if self.state is ConnectionState.OPEN:
             self._disconnect(code, reason)
         else:
@@ -739,13 +746,17 @@ class Websocket:
             env = new_env(cr, self._session, set_lang=True)
             for callback in self.__event_callbacks[event_type]:
                 try:
-                    retrying(functools.partial(callback, env, self), env)
+                    retrying(functools.partial(callback, env, self), env, close_on_commit=False)
                 except Exception:
                     _logger.warning(
                         "Error during Websocket %s callback",
                         LifecycleEvent(event_type).name,
                         exc_info=True,
                     )
+                finally:
+                    # retrying leaves the cursor in a bad state state, and since
+                    # we continue to use it, we must rollback
+                    cr.rollback()
 
     def _assert_session_validity(self):
         """Ensure the current session exists and validate it using
@@ -942,17 +953,16 @@ class WebsocketRequest:
         data = jsonrequest.get('data')
         self.session = self._get_session()
 
-        try:
-            self.registry = Registry(self.db).check_signaling()
-        except (
-            AttributeError,
-            psycopg2.OperationalError,
-            psycopg2.ProgrammingError,
-        ) as exc:
-            raise InvalidDatabaseException() from exc
-
         with acquire_cursor(self.db) as cr:
-            self.env = new_env(cr, self.session, set_lang=True)
+            try:
+                self.env = new_env(cr, self.session, set_lang=True)
+                self.registry = self.env.registry
+            except (
+                AttributeError,
+                psycopg2.OperationalError,
+                psycopg2.ProgrammingError,
+            ) as exc:
+                raise InvalidDatabaseException() from exc
             retrying(
                 functools.partial(self._serve_ir_websocket, event_name, data),
                 self.env,
@@ -1040,10 +1050,11 @@ class WebsocketConnectionHandler:
         try:
             response = cls._get_handshake_response(request.httprequest.headers)
             socket = request.httprequest._HTTPRequest__environ['socket']
+            trailing_data = request.httprequest._HTTPRequest__environ.get('odoo.trailing_data', lambda: (b'', False))
             session, db, httprequest = (public_session or request.session), request.db, request.httprequest
             response.call_on_close(
                 lambda: cls._serve_forever(
-                    Websocket(socket, session, httprequest.cookies),
+                    Websocket(socket, session, httprequest.cookies, prelude=trailing_data()[0]),
                     db,
                     httprequest,
                     version,
