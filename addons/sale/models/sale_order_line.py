@@ -703,7 +703,7 @@ class SaleOrderLine(models.Model):
     @api.depends("product_id", "order_id.commitment_date", "display_qty_widget")
     def _compute_qty_at_date(self):
         """Compute the quantity forecasted of product at delivery date."""
-        self.scheduled_date = fields.Date.today()
+        self.scheduled_date = fields.Date.context_today(self)
         self.virtual_available_at_date = 0
         self.qty_available_today = 0
         for line in self:
@@ -856,15 +856,20 @@ class SaleOrderLine(models.Model):
             for combo_id in combo_line.product_template_id.sudo().combo_ids
         }
         total_combo_base_price = sum(combo_base_prices.values())
-        # Compute the prorated combo prices.
-        combo_prices = {
-            combo_id: self.currency_id.round(
-                # Don't divide by total_combo_base_price if it's 0. This will make the prorating
-                # wrong, but the delta will be fixed by combo_price_delta below.
-                base_price * combo_product_price / (total_combo_base_price or 1)
-            )
-            for (combo_id, base_price) in combo_base_prices.items()
-        }
+        # Compute the prorated combo prices. When all combos have a zero base price, prorating by
+        # base price would assign the whole combo product's price to a single combo (via
+        # combo_price_delta below), making one combo item show the full price while the others
+        # show 0. Distribute the price evenly instead.
+        if total_combo_base_price:
+            combo_prices = {
+                combo_id: self.currency_id.round(
+                    base_price * combo_product_price / total_combo_base_price
+                )
+                for (combo_id, base_price) in combo_base_prices.items()
+            }
+        else:
+            even_share = self.currency_id.round(combo_product_price / len(combo_base_prices))
+            combo_prices = {combo_id: even_share for combo_id in combo_base_prices}
         # Compute the delta between the combo product's price and the sum of its combo prices.
         # Ideally, this should be 0, but division in python isn't perfect, so we may need to adjust
         # the combo prices to make the delta 0.
@@ -1297,7 +1302,7 @@ class SaleOrderLine(models.Model):
                     invoice_line.move_id.state == "posted"
                     or invoice_line.move_id.payment_state == "invoicing_legacy"
                 ):
-                    invoice_date = invoice_line.move_id.invoice_date or fields.Date.today()
+                    invoice_date = invoice_line.move_id.invoice_date
                     if invoice_line.move_id.move_type == "out_invoice":
                         amount_invoiced += invoice_line.currency_id._convert(
                             invoice_line.price_subtotal,
@@ -1324,9 +1329,8 @@ class SaleOrderLine(models.Model):
                     invoice.state == "posted"
                     or invoice_line.move_id.payment_state == "invoicing_legacy"
                 ):
-                    invoice_date = invoice.invoice_date or fields.Date.context_today(self)
                     amount_invoiced_unsigned = invoice_line.currency_id._convert(
-                        invoice_line.price_total, line.currency_id, line.company_id, invoice_date
+                        invoice_line.price_total, line.currency_id, line.company_id, invoice.invoice_date,
                     )
                     amount_invoiced += amount_invoiced_unsigned * -invoice.direction_sign
             line.amount_invoiced = amount_invoiced
@@ -1386,7 +1390,7 @@ class SaleOrderLine(models.Model):
                                     aml.price_unit,
                                     line.currency_id,
                                     line.company_id,
-                                    aml.date or fields.Date.today(),
+                                    aml.date,
                                     round=False,
                                 )
                                 * aml.quantity
@@ -1397,7 +1401,7 @@ class SaleOrderLine(models.Model):
                                     aml.price_unit,
                                     line.currency_id,
                                     line.company_id,
-                                    aml.date or fields.Date.today(),
+                                    aml.date,
                                     round=False,
                                 )
                                 * aml.quantity
@@ -2015,7 +2019,7 @@ class SaleOrderLine(models.Model):
         self.ensure_one()
         to_currency = self.currency_id or self.order_id.currency_id
         if currency and to_currency and currency != to_currency:
-            conversion_date = self.order_id.date_order or fields.Date.context_today(self)
+            conversion_date = self.order_id.date_order
             company = self.company_id or self.order_id.company_id or self.env.company
             return currency._convert(
                 from_amount=amount,
@@ -2031,7 +2035,7 @@ class SaleOrderLine(models.Model):
         if not "accrual_entry_date" in self.env.context:
             return False
         accrual_date = fields.Date.from_string(self.env.context["accrual_entry_date"])
-        return accrual_date < fields.Date.today()
+        return accrual_date < fields.Date.context_today(self)
 
     def _get_discounted_price(self):
         self.ensure_one()

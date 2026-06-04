@@ -198,7 +198,7 @@ class ProductProduct(models.Model):
 
             if lot_valuated_products_ids:
                 domain = Domain([('product_id', 'in', lot_valuated_products_ids)])
-                if not self.env.context.get('warehouse_id'):
+                if not at_date and not self.env.context.get('warehouse_id'):
                     domain &= Domain([('product_qty', '!=', 0)])
                 lots_by_product = env['stock.lot']._read_group(
                     domain,
@@ -313,7 +313,7 @@ class ProductProduct(models.Model):
     def _get_standard_price_at_date(self, date=None):
         """ Get Last Price History """
         self.ensure_one()
-        if not date or date == fields.Date.today():
+        if not date or date == fields.Date.context_today(self):
             return self.standard_price
         if self.cost_method != 'standard':
             raise ValidationError(_("You can only get the standard price at a given date for products with 'Standard Price' as cost method."))
