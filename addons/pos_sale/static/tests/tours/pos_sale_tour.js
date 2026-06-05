@@ -123,7 +123,7 @@ registry.category("web_tour.tours").add("PosSettleOrderWithNote", {
                         name: "Whiteboard Pen",
                         cssRules: [
                             {
-                                css: ".info-list .customer-note",
+                                css: ".lines .line-note",
                                 text: "Customer note 2--Customer note 3",
                             },
                         ],
@@ -509,6 +509,16 @@ registry.category("web_tour.tours").add("test_ecommerce_unpaid_order_is_shown_in
             ProductScreen.clickPartnerButton(),
             ProductScreen.clickCustomer("A Test Partner 1"),
             PosSale.checkOrdersListNotEmpty(),
+        ].flat(),
+});
+
+registry.category("web_tour.tours").add("test_settle_so_custom_attribute_value", {
+    steps: () =>
+        [
+            Chrome.startPoS(),
+            Dialog.confirm("Open Register"),
+            PosSale.settleNthOrder(1),
+            Order.hasLine({ productName: "Inscription: Custom: Value" }),
         ].flat(),
 });
 
