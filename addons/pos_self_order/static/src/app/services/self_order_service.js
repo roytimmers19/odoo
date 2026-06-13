@@ -332,7 +332,6 @@ export class SelfOrder extends Reactive {
         for (const [date, slots] of Object.entries(availabilities)) {
             options.categories[date] = {
                 id: date,
-                name: luxon.DateTime.fromISO(date).toLocaleString(luxon.DateTime.DATE_SHORT),
                 subCategories: {},
             };
             for (const slot of Object.values(slots)) {
@@ -932,6 +931,8 @@ export class SelfOrder extends Reactive {
                 access_token: this.access_token,
             });
             return;
+        } else if (typeof error === "string") {
+            message = error;
         }
 
         this.notification.add(message, {
