@@ -985,6 +985,16 @@
                                            invisible="adjusting_entry_origin_moves_count == 1"
                                            string="Invoices" widget="statinfo"/>
                             </button>
+                            <button name="open_journal_items"
+                                    groups="account.group_account_invoice,account.group_account_readonly"
+                                    invisible="move_type == 'entry'"
+                                    class="oe_stat_button"
+                                    icon="fa-bars"
+                                    type="object">
+                                    <div class="o_stat_info">
+                                        <span class="o_stat_text">Journal Items</span>
+                                    </div>
+                            </button>
                         </div>
 
                         <widget name="web_ribbon" title="Sent"
@@ -1243,6 +1253,7 @@
                                            'default_currency_id': currency_id or company_currency_id,
                                            'default_display_type': 'product',
                                            'quick_encoding_vals': quick_encoding_vals,
+                                           'from_invoice_tab': True,
                                        }" readonly="state != 'draft'"
                                        aggregated_fields="price_subtotal,price_total"
                                        options="{'hide_composition': True, 'hide_prices': True, 'subsections': True}">
@@ -1264,7 +1275,7 @@
                                                     and [('sale_ok', '=', True)]
                                                     or [('purchase_ok', '=', True)]
                                                "/>
-                                        <field name="name" widget="section_and_note_text" optional="show"/>
+                                        <field name="name" widget="account_label_text" optional="show"/>
                                         <field name="account_id"
                                                context="{
                                                     'partner_id': partner_id,
