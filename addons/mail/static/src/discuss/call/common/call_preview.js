@@ -23,12 +23,17 @@ export class CallPreview extends Component {
 
     setup() {
         this.props = props({
-            "activateCamera?": types.number(),
-            "activateMicrophone?": types.number(),
-            "hasSettingsAtBottom?": types.boolean(),
-            "onSettingsChanged?": types.function([
-                types.object({ "camera?": types.boolean(), "microphone?": types.boolean() }),
-            ]),
+            activateCamera: types.number().optional(),
+            activateMicrophone: types.number().optional(),
+            hasSettingsAtBottom: types.boolean().optional(),
+            onSettingsChanged: types
+                .function([
+                    types.object({
+                        camera: types.boolean().optional(),
+                        microphone: types.boolean().optional(),
+                    }),
+                ])
+                .optional(),
         });
         this.dialog = useService("dialog");
         this.notification = useService("notification");
@@ -148,7 +153,7 @@ export class CallPreview extends Component {
         const cameraOnActionUpdated = {
             ...cameraOnAction,
             isActive: () => this.state.videoStream,
-            name: ({ action }) => (action.isActive ? _t("Stop camera") : _t("Turn camera on")),
+            name: ({ action }) => (action.isActive ? _t("Turn camera off") : _t("Turn camera on")),
             onSelected: () => this.toggleCamera(),
             tags: (...args) => {
                 const tags = cameraOnAction.tags?.(...args) ?? [];

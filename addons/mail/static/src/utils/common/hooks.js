@@ -6,6 +6,7 @@ import {
     props,
     proxy,
     types,
+    untrack,
     useEffect,
     xml,
 } from "@odoo/owl";
@@ -936,7 +937,7 @@ export function useLongPress(ref, { action, predicate = () => true } = {}) {
 }
 
 export const inDiscussCallViewProps = ["isPip?"];
-export const inDiscussCallViewPropsSchema = { "isPip?": types.boolean() };
+export const inDiscussCallViewPropsSchema = { isPip: types.boolean().optional() };
 export function useInDiscussCallView() {
     const component = useComponent();
     useSubEnv({
@@ -1000,4 +1001,21 @@ export class UseForwardRefsToParent {
  */
 export function useForwardRefsToParent(propName, getRefIdFn, ref) {
     new UseForwardRefsToParent(propName, getRefIdFn, ref);
+}
+
+/**
+ * @template {readonly any[]} [T=any[]]
+ * @param {(...deps: T) => void} callback
+ * @param {Object} [options]
+ * @param {boolean} [options.initialRun=true] determine if the hook should skip the first run
+ */
+export function useOnChange(dependencies, callback, { initialRun } = { initialRun: true }) {
+    let firstRun = true;
+    useEffect(() => {
+        const dep = dependencies();
+        if (initialRun || !firstRun) {
+            untrack(() => callback(...dep));
+        }
+        firstRun = false;
+    });
 }

@@ -1,10 +1,11 @@
-import { Component, onWillUpdateProps, props, types } from "@odoo/owl";
+import { Component, props, t } from "@odoo/owl";
 import { ActionPanel } from "@mail/discuss/core/common/action_panel";
 import { _t } from "@web/core/l10n/translation";
 import { useService } from "@web/core/utils/hooks";
 import { SearchMessageInput } from "@mail/core/common/search_message_input";
 import { SearchMessageResult } from "@mail/core/common/search_message_result";
 import { useMessageSearch } from "./message_search_hook";
+import { useOnChange } from "@mail/utils/common/hooks";
 
 export class SearchMessagesPanel extends Component {
     static template = "mail.SearchMessagesPanel";
@@ -14,15 +15,15 @@ export class SearchMessagesPanel extends Component {
         super.setup(...arguments);
         this.store = useService("mail.store");
         this.props = props({
-            "close?": types.function([types.instanceOf(MouseEvent)]),
-            thread: types.instanceOf(this.store["mail.thread"].Class),
+            close: t.function([]).optional(),
+            thread: t.instanceOf(this.store["mail.thread"].Class),
         });
         this.messageSearch = this.env.messageSearch ?? useMessageSearch(this.props.thread);
-        onWillUpdateProps((nextProps) => {
-            if (this.props.thread.notEq(nextProps.thread)) {
-                this.env.searchMenu?.close();
-            }
-        });
+        useOnChange(
+            () => [this.props.thread],
+            () => this.env.searchMenu?.close(),
+            { initialRun: false }
+        );
     }
 
     get title() {

@@ -1,7 +1,8 @@
 import { ActivityListPopoverItem } from "@mail/core/web/activity_list_popover_item";
+import { useOnChange } from "@mail/utils/common/hooks";
 import { compareDatetime } from "@mail/utils/common/misc";
 
-import { Component, onWillUpdateProps, props, types } from "@odoo/owl";
+import { Component, props, types } from "@odoo/owl";
 
 import { useService } from "@web/core/utils/hooks";
 
@@ -14,16 +15,18 @@ export class ActivityListPopover extends Component {
         this.props = props({
             activityIds: types.array(types.number()),
             close: types.function([]),
-            "defaultActivityTypeId?": types.number(),
+            defaultActivityTypeId: types.number().optional(),
             onActivityChanged: types.function([]),
             resId: types.number(),
             /** Ids of record selection used to schedule activities in batch; it must include resId. */
-            "resIds?": types.array(types.number()),
+            resIds: types.array(types.number()).optional(),
             resModel: types.string(),
         });
         this.store = useService("mail.store");
-        this.updateFromProps(this.props);
-        onWillUpdateProps((props) => this.updateFromProps(props));
+        useOnChange(
+            () => [this.props.activityIds],
+            (activityIds) => this.store.fetchStoreData("mail.activity", { ids: activityIds })
+        );
     }
 
     get activities() {
@@ -59,9 +62,5 @@ export class ActivityListPopover extends Component {
 
     get todayActivities() {
         return this.activities.filter((activity) => activity.state === "today");
-    }
-
-    async updateFromProps(props) {
-        await this.store.fetchStoreData("mail.activity", { ids: props.activityIds });
     }
 }
