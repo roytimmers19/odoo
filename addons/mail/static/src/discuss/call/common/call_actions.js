@@ -88,7 +88,7 @@ export const quickActionSettings = {
         !owner.env.inCallMenu && channel?.isSelfInCall && !owner.env.pipWindow,
     dropdown: true,
     dropdownComponent: QuickVoiceSettings,
-    dropdownMenuClass: "p-2",
+    dropdownMenuClass: "p-1 overflow-x-hidden",
     dropdownPosition: "top-end",
     icon: "oi oi-chevron-up o-xsmaller",
     name: _t("Voice Settings"),
@@ -152,7 +152,7 @@ export const quickVideoSettings = {
         !owner.env.inCallMenu && channel?.isSelfInCall && !owner.env.pipWindow,
     dropdown: true,
     dropdownComponent: QuickVideoSettings,
-    dropdownMenuClass: "p-2",
+    dropdownMenuClass: "p-1 overflow-x-hidden",
     dropdownPosition: "top-end",
     icon: "oi oi-chevron-up o-xsmaller",
     name: _t("Video Settings"),
@@ -213,7 +213,7 @@ registerCallAction("fullscreen", {
     onSelected: ({ channel, store }) => {
         channel.promoteFullscreen = CALL_PROMOTE_FULLSCREEN.DISCARDED;
         if (store.rtc.isBrowserFullscreen) {
-            store.rtc.exitFullscreen();
+            store.rtc.exitBrowserFullscreen();
         } else {
             store.rtc.closePip();
             store.rtc.enterFullscreen(undefined, { browserFullscreen: true });
