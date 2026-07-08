@@ -78,7 +78,7 @@ _ref_vat = {
     'si': 'SI12345679',
     'sk': 'SK2022749619',
     'sm': 'SM24165',
-    'th': '1234545678781',
+    'th': _lt('0123456789016 or 1234545678781 [13 digits]'),
     'tr': _lt('11111111111 (NIN) or 2222222222 (VKN)'),
     'ua': _lt('12345678 or UA12345678 (EDRPOU), 1234567890 (RNOPP) or 123456789012 (IPN)'),
     'uy': _lt("Example: '219999830019' (format: 12 digits, all numbers, valid check digit)"),
@@ -148,7 +148,7 @@ class ResPartner(models.Model):
         # Avoid validating double prefix like BEBE0477472701
         double_prefix = prefixed_country and vat_to_return.startswith(prefixed_country + prefixed_country)
         if not self._check_vat_number(code_to_check, vat) or double_prefix:
-            partner_label = _("partner [%s]", partner_name)
+            partner_label = _("partner%s", f' [{partner_name}]' if partner_name else '')
             if do_eu_check:
                 try:
                     return self._run_vat_checks(self.env['res.country'].search([('code', '=', country_code)], limit=1), vat_prefix + vat_number, partner_name, validation)
