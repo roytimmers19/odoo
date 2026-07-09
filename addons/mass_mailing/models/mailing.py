@@ -555,6 +555,8 @@ class MailingMailing(models.Model):
                 mailing.recipients_count = self.env[mailing.mailing_model_real].search_count(mailing._get_recipients_domain())
             elif mailing.contact_list_ids:
                 mailing.recipients_count = sum(contact_list.contact_count for contact_list in mailing.contact_list_ids)
+            else:
+                mailing.recipients_count = 0
 
     # ------------------------------------------------------
     # ORM
@@ -1041,9 +1043,19 @@ class MailingMailing(models.Model):
         done_res_ids = {record['res_id'] for record in already_mailed}
         return [rid for rid in res_ids if rid not in done_res_ids]
 
+    def _get_recipient_base_url(self):
+        """ Base URL of the recipient record passed in context when sending,
+        so links stay on the recipient's website in multi-website setups (see
+        mail.mail). Only a recordset is used, never a plain value, so a context
+        set from an RPC call cannot redirect the links to another host. """
+        recipient = self.env.context.get('mailing_recipient_record')
+        if isinstance(recipient, models.BaseModel):
+            return recipient.get_base_url()
+        return self.get_base_url()
+
     def _get_unsubscribe_oneclick_url(self, email_to, res_id):
         url = tools.urls.urljoin(
-            self.get_base_url(), 'mailing/%(mailing_id)s/unsubscribe_oneclick?%(params)s' % {
+            self._get_recipient_base_url(), 'mailing/%(mailing_id)s/unsubscribe_oneclick?%(params)s' % {
                 'mailing_id': self.id,
                 'params': werkzeug.urls.url_encode({
                     'document_id': res_id,
@@ -1056,7 +1068,7 @@ class MailingMailing(models.Model):
 
     def _get_unsubscribe_url(self, email_to, res_id):
         url = tools.urls.urljoin(
-            self.get_base_url(), 'mailing/%(mailing_id)s/confirm_unsubscribe?%(params)s' % {
+            self._get_recipient_base_url(), 'mailing/%(mailing_id)s/confirm_unsubscribe?%(params)s' % {
                 'mailing_id': self.id,
                 'params': werkzeug.urls.url_encode({
                     'document_id': res_id,
@@ -1069,7 +1081,7 @@ class MailingMailing(models.Model):
 
     def _get_view_url(self, email_to, res_id):
         url = tools.urls.urljoin(
-            self.get_base_url(), 'mailing/%(mailing_id)s/view?%(params)s' % {
+            self._get_recipient_base_url(), 'mailing/%(mailing_id)s/view?%(params)s' % {
                 'mailing_id': self.id,
                 'params': werkzeug.urls.url_encode({
                     'document_id': res_id,
