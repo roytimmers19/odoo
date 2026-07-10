@@ -15,6 +15,8 @@ from freezegun import freeze_time
 @tagged('post_install', '-at_install')
 class TestAccountMoveOutInvoiceOnchanges(AccountTestInvoicingCommon):
 
+    _test_user_groups = None  # FIXME list needed groups
+
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -3970,8 +3972,9 @@ class TestAccountMoveOutInvoiceOnchanges(AccountTestInvoicingCommon):
             'move_type': 'out_invoice',
             'partner_id': self.partner_a.id,
             'currency_id': self.other_currency.id,  # EUR
-            'invoice_line_ids': [
+            'line_ids': [
                 Command.create({
+                    'display_type': 'payment_term',
                     'product_id': self.product_a.id,
                     'quantity': 1.0,
                     'account_id': receivable_account.id,
