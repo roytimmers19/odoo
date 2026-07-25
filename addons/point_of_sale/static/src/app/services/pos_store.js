@@ -227,6 +227,7 @@ export class PosStore extends WithLazyGetterTrap {
                 }
             }
         });
+        await this.checkAccessRight();
     }
 
     handleQRPaymentLines() {
@@ -861,6 +862,7 @@ export class PosStore extends WithLazyGetterTrap {
             (attr) => attr.attribute_id?.id in attrById
         );
         let attributeLinesValues = attributeLines.map((attr) => attr.product_template_value_ids);
+        let variantProduct = null;
         if (opts.code || opts.presetVariant) {
             let product;
             if (opts.code) {
@@ -878,6 +880,7 @@ export class PosStore extends WithLazyGetterTrap {
             } else {
                 product = opts.presetVariant;
             }
+            variantProduct = product;
 
             const attrValueIds = new Set(
                 product?.product_template_attribute_value_ids?.map((v) => v.id) || []
@@ -897,10 +900,13 @@ export class PosStore extends WithLazyGetterTrap {
                     values[0].attribute_id.display_type === "multi"
             )
         ) {
+            const forceVariantValue =
+                opts.forceVariantValue ||
+                (variantProduct ? variantProduct.product_template_attribute_value_ids : undefined);
             return await makeAwaitable(this.dialog, ProductConfiguratorPopup, {
                 productTemplate: pTemplate,
                 hideAlwaysVariants: opts.hideAlwaysVariants,
-                forceVariantValue: opts.forceVariantValue,
+                forceVariantValue,
                 line: opts.line,
             });
         }
@@ -2109,8 +2115,22 @@ export class PosStore extends WithLazyGetterTrap {
         await this.data.call("pos.config", "load_demo_data", [[this.config.id]]);
         await this.reloadData(true);
     }
+
+    async checkAccessRight() {
+        try {
+            this.canUserCreateProduct = await user.checkAccessRight("product.product", "create");
+        } catch {
+            this.canUserCreateProduct = false;
+        }
+    }
+
+    get hasProductCreationAccess() {
+        return this.canUserCreateProduct;
+    }
+
+    // TODO: Remove in master. Use `hasProductCreationAccess` instead.
     async allowProductCreation() {
-        return await user.checkAccessRight("product.product", "create");
+        return this.hasProductCreationAccess;
     }
     editPayment(order) {
         this.setOrder(order);
