@@ -20,6 +20,7 @@ from odoo import api, fields, models, _, SUPERUSER_ID, modules
 from odoo.addons.account.tools import format_structured_reference_iso
 from odoo.exceptions import UserError, ValidationError, AccessError, RedirectWarning
 from odoo.fields import Command, Domain
+from odoo.tools.mimetypes import guess_mimetype
 from odoo.tools.misc import clean_context
 from odoo.tools import (
     date_utils,
@@ -4006,10 +4007,14 @@ class AccountMove(models.Model):
             # Disallow modifying readonly fields on a posted move
             move_state = vals.get('state', move.state)
             if not self.env.context.get('skip_readonly_check') and move_state == "posted" and modified_accounting_fields:
-                raise UserError(_("You cannot modify the following readonly fields on a posted move: %s", ', '.join(
-                    self._fields[fname]._description_string(self.env)
-                    for fname in modified_accounting_fields
-                )))
+                raise UserError(self.env._(
+                    "You cannot modify the following readonly fields on the posted move %(move)s: %(fields)s",
+                    move=move.name or move.ref or move.id,
+                    fields=', '.join(
+                        self._fields[fname]._description_string(self.env)
+                        for fname in modified_accounting_fields
+                    ),
+                ))
 
             if move.journal_id.sequence_override_regex and vals.get('name') and vals['name'] != '/' and not re.match(move.journal_id.sequence_override_regex, vals['name']):
                 if not self.env.user.has_group('account.group_account_manager'):
@@ -7070,7 +7075,10 @@ class AccountMove(models.Model):
 
     def _get_action_with_base_document_layout_configurator(self, report_action):
         if (
-            self.env.is_admin()
+            (
+                self.env.is_admin()
+                or self.env.user.has_group('account.group_account_basic')
+            )
             and not self.env.company.external_report_layout_id
             and not self.env.context.get('discard_logo_check')
         ):
@@ -7078,6 +7086,7 @@ class AccountMove(models.Model):
                 report_action,
                 "account.action_base_document_layout_configurator",
             )
+            report_action['context']['can_configure_later'] = True
             report_action['context']['default_from_invoice'] = self.move_type == 'out_invoice'
         return report_action
 
@@ -7413,6 +7422,13 @@ class AccountMove(models.Model):
         elif allow_fallback:
             return [self._get_invoice_pdf_proforma()]
         return []
+
+    def _message_set_main_attachment_id(self, attachments, force=False, filter_xml=True):
+        if filter_xml:
+            attachments = attachments.filtered(
+                lambda att: not (att.mimetype == 'text/plain' and guess_mimetype(att.raw or b'').endswith('/xml'))
+            )
+        super()._message_set_main_attachment_id(attachments, force=force, filter_xml=filter_xml)
 
     def _get_invoice_report_filename(self, extension='pdf', report=None):
         """ Get the filename of the generated invoice report with extension file. """
