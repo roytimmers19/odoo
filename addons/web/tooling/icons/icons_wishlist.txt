@@ -70,6 +70,7 @@ calculate
 calendar_add_on
 calendar_clock
 calendar_today
+call
 call_merge
 campaign
 cancel
@@ -113,6 +114,7 @@ crisis_alert
 crop
 crop_rotate
 crop_landscape
+crown
 currency_bitcoin
 currency_lira
 currency_pound
@@ -349,6 +351,7 @@ save
 schedule
 school
 science
+screen_rotation_alt
 search
 security
 select_all
@@ -443,6 +446,7 @@ verified
 vertical_align_bottom
 vertical_align_center
 vertical_align_top
+video_call
 video_file
 videocam
 view_column

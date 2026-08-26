@@ -292,6 +292,10 @@ const MS_ICONS = {
         has_fill: true,
         tags: "agenda appointment booking calendar calendaricon calendartoday daily date dating day diary event grid lines month monthly organizer plan planning punctual rectangle reminder schedule square time today todaycalendar week year yearly",
     },
+    call: {
+        has_fill: true,
+        tags: "audio business call cell communication connect connection contact contact us customer service device dial directory emergency handset hardware help incoming local phone mobile office outgoing phone phone alt receiver ring speak support talk telecommunication telephone voice",
+    },
     call_merge: {
         has_fill: false,
         tags: "arrow arrows branches call collapse combine connect connect points connecting points consolidate consolidate lines converge converging lines data device diagram direction dots flowchart graph integrate join lines link merge mobile network node points structure union unity",
@@ -463,6 +467,10 @@ const MS_ICONS = {
     crop_rotate: {
         has_fill: false,
         tags: "adjust adjustments area arrow arrows aspect ratio canvas circle clockwise corners counter-clockwise crop direction edit editing frame graphic image images manipulate modify orientation photo photos picture rearrange reorient resize rotate settings size square tool transform turn visual",
+    },
+    crown: {
+        has_fill: true,
+        tags: "achievement award best bonus challenge crown exclusive high king leaderboard level member membership premium queen rank ranking reward royalty special success tiara top trend trending unique unlock upgrade victory vip winner",
     },
     currency_bitcoin: {
         has_fill: false,
@@ -1408,6 +1416,10 @@ const MS_ICONS = {
         has_fill: true,
         tags: "analysis beaker beaker icon chemical chemistry chemistry icon container discovery education experiment experiment icon flask fluid glass glassware innovation knowledge lab lab icon laboratory learning liquid reaction research research icon science scientific solution study test tube tube",
     },
+    screen_rotation_alt: {
+        has_fill: false,
+        tags: "Android OS adjust alter alternate alternative arrow change circle circular control counter clockwise counterclockwise device direction display flip hardware iOS landscape mobile orientation phone portrait refresh reload rotate rotation screen screen rotation setting switch tablet turn",
+    },
     search: {
         has_fill: false,
         tags: "browse circle discover discover icon explore explore icon filter find find icon glass handle inspect investigate locate locate icon look magnifier magnify magnifying mode options query query icon scope search search bar search button see stick tool view zoom",
@@ -1783,6 +1795,10 @@ const MS_ICONS = {
     vertical_align_top: {
         has_fill: false,
         tags: "align alignment arrange arrow box doc document down edit editing editor format layout line move object position rectangle sheet sort spreadsheet text top type up vertical vertically writing",
+    },
+    video_call: {
+        has_fill: true,
+        tags: "+ add audio broadcast call camera chat cinema communication conference distance learning film film strip filming group call hardware image live media meeting motion movie multimedia new online meeting picture plus record remote communication remote work streaming symbol telehealth video video chat video conferencing videocall videography virtual meeting webcam",
     },
     video_file: {
         has_fill: true,
