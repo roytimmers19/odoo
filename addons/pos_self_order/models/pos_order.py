@@ -69,7 +69,11 @@ class PosOrder(models.Model):
         ):
             return
         try:
-            self.action_send_self_order_receipt(self.email, self.preset_id.mail_template_id.id, False, False)
+            ticket_image = self.order_receipt_generate_image()
+            basic_image = False
+            if self.config_id.basic_receipt:
+                basic_image = self.order_receipt_generate_image(True)
+            self.action_send_self_order_receipt(self.email, self.preset_id.mail_template_id.id, ticket_image, basic_image)
         except UserError as e:
             _logger.warning("Error while sending email: %s", e.args[0])
 
@@ -80,7 +84,7 @@ class PosOrder(models.Model):
         if not mail_template:
             raise UserError(_("The mail template with xmlid %s has been deleted.", mail_template_id))
         email_values = {'email_to': email}
-        if self.state == 'paid' and ticket_image:
+        if self.state in ('paid', 'done') and ticket_image:
             email_values['attachment_ids'] = self._get_mail_attachments(self.name, ticket_image, basic_image)
         mail_template.send_mail(self.id, force_send=True, email_values=email_values)
 
@@ -341,6 +345,7 @@ class PosOrder(models.Model):
         self.ensure_one()
         self._check_combo_lines()
         company = self.company_id
+        tip_product = self.config_id.tip_product_id
 
         service_fee_lines = self.lines.filtered(
             lambda line: line.product_id == self.preset_id.service_fee_product_id,
@@ -353,6 +358,12 @@ class PosOrder(models.Model):
                 self._compute_combo_price(line)
             elif line.product_id == self.preset_id.delivery_product_id:
                 self._compute_line_price(line, price=self.preset_id.delivery_product_price)
+            elif line.product_id == tip_product:
+                if line.price_unit <= 0:
+                    line.unlink()
+                else:
+                    line.qty = 1
+                    self._compute_line_price(line, price=line.price_unit)
             elif not line.combo_parent_id:
                 # Lines without a combo parent are priced on their own. A line whose combo
                 # parent doesn't belong to this order is never reached by _compute_combo_price,

@@ -9,6 +9,8 @@ import {
 import { prepareRoundingVals } from "../accounting/utils";
 import { getService, patchWithCleanup } from "@web/../tests/web_test_helpers";
 import { localization } from "@web/core/l10n/localization";
+import { PosNumberBufferPlugin } from "@point_of_sale/app/plugins/pos_number_buffer_plugin";
+
 const { DateTime } = luxon;
 
 definePosModels();
@@ -254,6 +256,19 @@ describe("pos_store.js", () => {
         const addedProduct = orderLines.at(-1).product_id;
         expect(orderLines.length).toBe(1);
         expect(addedProduct.id).toBe(61);
+        const iceCream = store.models["product.product"].get(153);
+
+        await store.addLineToCurrentOrder(
+            { product_id: iceCream, product_tmpl_id: iceCream.product_tmpl_id },
+            {}
+        );
+        const lastOrderLine = store.getOrder().lines[1];
+        const addedProduct1 = lastOrderLine.product_id;
+        expect(store.getOrder().lines.length).toBe(2);
+        expect(addedProduct1.id).toBe(153);
+        expect(lastOrderLine.attribute_value_ids).toHaveLength(1);
+        expect(lastOrderLine.attribute_value_ids[0].id).toBe(12);
+        expect(lastOrderLine.attribute_value_ids[0].name).toBe("Male");
     });
 
     test("getPreparationChangesNoPrepCateg", async () => {
@@ -784,7 +799,7 @@ describe("pos_store.js", () => {
 
     test("tip scenario with different decimal separators", async () => {
         const store = await setupPosEnv();
-        const numberBuffer = getService("number_buffer");
+        const numberBuffer = getService(PosNumberBufferPlugin);
         const order = store.addNewOrder();
 
         const fakeState = { buffer: "", toStartOver: false, lastSet: false };

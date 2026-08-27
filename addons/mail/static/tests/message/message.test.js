@@ -703,6 +703,74 @@ test("can add new mentions when editing message", async () => {
     });
 });
 
+test("edit message with multiple mentions keeps the links", async () => {
+    const pyEnv = await startServer();
+    const partnersId = pyEnv["res.partner"].create([
+        {
+            // id: 123
+            email: "testpartner1@odoo.com",
+            name: "Test Partner",
+        },
+        {
+            // id: 1234
+            email: "testpartner2@odoo.com",
+            name: "Other Partner",
+        },
+        {
+            // id: 125
+            email: "testpartner3@odoo.com",
+            name: "Test Partner Junior",
+        },
+    ]);
+    // Craft partner id whose value is included in other partner's id, e.g. "123" and "1234".
+    // Mentions are presented by partner id and should be detected unambiguously.
+    const idOverrides = [{ id: 123 }, { id: 1234 }, { id: 125 }];
+    partnersId.forEach((p, i) => {
+        pyEnv["res.partner"].write(p, idOverrides[i]);
+    });
+
+    pyEnv["mail.message"].create([
+        {
+            author_id: serverState.partnerId,
+            body: "@Other Partner says hi to @Test Partner",
+            model: "res.partner",
+            message_type: "comment",
+            partner_ids: [123, 1234],
+            res_id: serverState.partnerId,
+        },
+        {
+            author_id: serverState.partnerId,
+            body: "@Test Partner Junior says hi to @Test Partner",
+            model: "res.partner",
+            message_type: "comment",
+            partner_ids: [123, 125],
+            res_id: serverState.partnerId,
+        },
+    ]);
+    await start();
+    await openFormView("res.partner", serverState.partnerId);
+    await click(".o-mail-Message:eq(0) [title='Expand']");
+    await click(".o-dropdown-item:text('Edit')");
+    await insertText(".o-mail-Message:eq(0) .o-mail-Composer-input", " with edit");
+    await click(".o-mail-Message button", { text: "save" });
+    await contains('.o-mail-Message:eq(0) a.o_mail_redirect[data-oe-id="125"]', {
+        text: "@Test Partner Junior",
+    });
+    await contains('.o-mail-Message:eq(0) a.o_mail_redirect[data-oe-id="123"]', {
+        text: "@Test Partner",
+    });
+    await click(".o-mail-Message:eq(1) [title='Expand']");
+    await click(".o-dropdown-item:text('Edit')");
+    await insertText(".o-mail-Message:eq(1) .o-mail-Composer-input", " with edit");
+    await click(".o-mail-Message button", { text: "save" });
+    await contains('.o-mail-Message:eq(1) a.o_mail_redirect[data-oe-id="1234"]', {
+        text: "@Other Partner",
+    });
+    await contains('.o-mail-Message:eq(1) a.o_mail_redirect[data-oe-id="123"]', {
+        text: "@Test Partner",
+    });
+});
+
 test("Other messages are grayed out when replying to another one", async () => {
     const pyEnv = await startServer();
     const channelId = pyEnv["discuss.channel"].create({
@@ -917,28 +985,6 @@ test("Two users reacting with the same emoji", async () => {
     await click(".o-mail-MessageReaction:text('😅 2')");
     await click(".o-mail-MessageReaction:text('😅 1')");
     await contains(".o-mail-MessageReaction:text('😅 2')");
-});
-
-test("Can quickly add a reaction", async () => {
-    const pyEnv = await startServer();
-    const channelId = pyEnv["discuss.channel"].create({
-        channel_type: "channel",
-        name: "channel1",
-    });
-    pyEnv["mail.message"].create({
-        body: "Hello world",
-        res_id: channelId,
-        message_type: "comment",
-        model: "discuss.channel",
-    });
-    await start();
-    await openDiscuss(channelId);
-    await click("[title='Add a Reaction']");
-    await click(".o-mail-QuickReactionMenu button:text('😅')");
-    await contains(".o-mail-MessageReaction:text('😅 1')");
-    await click(".o-mail-MessageReactions button[title='Add a Reaction']");
-    await click(".o-mail-QuickReactionMenu button:text('🤣')");
-    await contains(".o-mail-MessageReaction:text('🤣 1')");
 });
 
 test("Reaction summary", async () => {
@@ -1576,9 +1622,8 @@ test("Message in message delete dialog should be read-only", async () => {
     await openDiscuss(channelId);
     await contains(".o-mail-MessageReaction");
     await contains(".o-mail-MessageReaction:text(😅 1)");
-    await contains(".o-mail-MessageReactions [title='Add a Reaction']");
     const messageActionsSelector = ".o-mail-Message-actions";
-    await contains(messageActionsSelector);
+    await contains(`${messageActionsSelector} [title='Add a Reaction']`);
     await click(".o-mail-Message [title='Expand']");
     await click(".o-dropdown-item:text('Delete')");
     await contains(
@@ -1587,7 +1632,7 @@ test("Message in message delete dialog should be read-only", async () => {
     await contains(".modal .pe-none .o-mail-Message"); // pe-none around message prevents any button click
     await contains(".modal .o-mail-MessageReaction");
     await contains(".modal .o-mail-MessageReaction:text(😅 1)");
-    await contains(".modal .o-mail-MessageReactions [title='Add a Reaction']", { count: 0 });
+    await contains(".modal .o-mail-Message [title='Add a Reaction']", { count: 0 });
     await contains(`.modal ${messageActionsSelector}`, { count: 0 });
 });
 

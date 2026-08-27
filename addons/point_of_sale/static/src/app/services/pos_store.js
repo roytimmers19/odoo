@@ -51,6 +51,7 @@ import { PosRouterPlugin } from "@point_of_sale/app/plugins/pos_router_plugin";
 import { CustomerDisplayTerminalPlugin } from "@point_of_sale/app/plugins/customer_display_terminal_plugin";
 import { SIZES } from "@web/core/ui/ui_utils";
 import { SnoozeDialog } from "@point_of_sale/app/components/popups/product_info_popup/snooze_dialog/snooze_dialog";
+import { PosNumberBufferPlugin } from "@point_of_sale/app/plugins/pos_number_buffer_plugin";
 
 const { DateTime } = luxon;
 export const CONSOLE_COLOR = "#F5B427";
@@ -76,7 +77,6 @@ export class PosStore extends WithLazyGetterTrap {
 
     static serviceDependencies = [
         "bus_service",
-        "number_buffer",
         "barcode_reader",
         "ui",
         "pos_data",
@@ -100,7 +100,6 @@ export class PosStore extends WithLazyGetterTrap {
     async setup(
         env,
         {
-            number_buffer,
             barcode_reader,
             ui,
             dialog,
@@ -113,7 +112,7 @@ export class PosStore extends WithLazyGetterTrap {
         }
     ) {
         this.env = env;
-        this.numberBuffer = number_buffer;
+        this.numberBuffer = usePlugin(PosNumberBufferPlugin);
         this.barcodeReader = barcode_reader;
         this.ui = ui;
         this.dialog = dialog;
@@ -400,6 +399,8 @@ export class PosStore extends WithLazyGetterTrap {
         const orders = this.models["pos.order"].getAll();
         this.device.saveUnusedNumber(orders);
         await this.data.resetIndexedDB();
+        sessionStorage.clear();
+        localStorage.clear();
         const url = new URL(window.location.href);
 
         if (fullReload) {
@@ -1548,6 +1549,7 @@ export class PosStore extends WithLazyGetterTrap {
             (order) =>
                 order.isEmptyOrder() &&
                 !order.finalized &&
+                !order.isSynced &&
                 (!order.partner_id || order.partner_id.id === defaultPartnerId) &&
                 order.pricelist_id?.id === this.config.pricelist_id?.id &&
                 order.fiscal_position_id?.id === this.config.default_fiscal_position_id?.id
@@ -1678,7 +1680,6 @@ export class PosStore extends WithLazyGetterTrap {
         // We are now syncing orders one by one to avoid cancelling all sync
         // when one order fails, this also avoid timeout issues with a lot of orders
         let errorOccurred = false;
-        let newSession = false;
         const syncedOrders = [];
 
         for (const order of orders) {
@@ -1717,7 +1718,6 @@ export class PosStore extends WithLazyGetterTrap {
                 await this.postSyncAllOrders(newData["pos.order"]);
                 this.removePendingOrder(order);
                 syncedOrders.push(...newData["pos.order"]);
-                newSession = newSession || data["pos.session"].length > 0;
             } catch (error) {
                 if (options.throw) {
                     throw error;
@@ -1744,21 +1744,6 @@ export class PosStore extends WithLazyGetterTrap {
             // the order can be deleted from the server side during the sync_from_ui call
             this.deviceSync.readDataFromServer();
         }
-
-        if (newSession) {
-            // Replace the original session by the rescue one. And the rescue one will have
-            // a higher id than the original one since it's the last one created.
-            const sessions = this.models["pos.session"].sort((a, b) => a.id - b.id);
-            if (sessions.length > 1) {
-                const sessionToDelete = sessions.slice(0, -1);
-                this.models["pos.session"].deleteMany(sessionToDelete);
-            }
-            this.models["pos.order"]
-                .getAll()
-                .filter((order) => order.state === "draft")
-                .forEach((order) => (order.session_id = this.session));
-        }
-
         return syncedOrders;
     }
 
