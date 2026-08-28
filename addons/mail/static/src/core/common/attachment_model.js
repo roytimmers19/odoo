@@ -9,11 +9,10 @@ import { imageUrl, url } from "@web/core/utils/urls";
 
 export class Attachment extends FileModelMixin(Record) {
     static _name = "ir.attachment";
-    static new() {
-        /** @type {import("models").Attachment} */
-        const attachment = super.new(...arguments);
-        attachment.onChange(
-            () => [attachment.extension, attachment.name],
+    setup() {
+        super.setup(...arguments);
+        this.onChange(
+            () => [this.extension, this.name],
             function onChangeName(extension, name) {
                 if (!extension && name) {
                     this.extension = name.split(".").pop();
@@ -21,7 +20,6 @@ export class Attachment extends FileModelMixin(Record) {
             },
             { immediate: true }
         );
-        return attachment;
     }
 
     composer = fields.One("Composer", { inverse: "attachments" });
@@ -179,6 +177,26 @@ export class Attachment extends FileModelMixin(Record) {
                 )
             );
         }
+    }
+
+    get textThumbnailUrl() {
+        if (this.id < 0) {
+            return "";
+        }
+        return url(`/mail/attachment/render_text/${encodeURIComponent(this.id)}`, {
+            ...this.urlQueryParams,
+            head: "1",
+        });
+    }
+
+    get defaultSource() {
+        if (this.isText) {
+            return url(
+                `/mail/attachment/render_text/${encodeURIComponent(this.id)}`,
+                this.urlQueryParams
+            );
+        }
+        return super.defaultSource;
     }
 }
 

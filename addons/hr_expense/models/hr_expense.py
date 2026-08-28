@@ -286,8 +286,8 @@ class HrExpense(models.Model):
     )
     payment_mode = fields.Selection(
         selection=[
-            ('own_account', "Employee"),
-            ('company_account', "None (company)")
+            ('own_account', "Employee (Through a Purchase Receipt)"),
+            ('company_account', "None (Paid by Company)")
         ],
         string="Reimbursement",
         default='own_account',
@@ -1301,8 +1301,8 @@ class HrExpense(models.Model):
                     'subject': _("New expenses waiting for your approval"),
                 })
                 all_submitted_expenses.last_notification_date = fields.Datetime.now()
-            if new_mails:
-                self.env['mail.mail'].sudo().create(new_mails).send()
+        if new_mails:
+            self.env['mail.mail'].sudo().create(new_mails).send()
 
     @api.model
     def get_empty_list_help(self, help_message):

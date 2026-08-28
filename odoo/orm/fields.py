@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import functools
 import collections
-import itertools
 import logging
 import operator as pyoperator
 import re
@@ -18,8 +17,9 @@ from psycopg2.extras import Json as PsycopgJson
 
 from odoo.exceptions import AccessError, MissingError
 from odoo.tools import SQL, reset_cached_properties, sql
-from odoo.tools.constants import PREFETCH_MAX
+from odoo.tools.constants import IN_MAX
 from odoo.tools.misc import frozendict, SENTINEL, Sentinel, unique
+
 
 from .domains import Domain
 from .query import Query
@@ -1038,6 +1038,8 @@ class Field[T]:
             return True
 
         model = env[self.model_name]
+        if self.relational and getattr(env[self.comodel_name], '_access_domain_heavy', False):
+            return False
         query = model._as_query(ordered=False)
         try:
             model._order_field_to_sql(query.table, self.name, SQL(), SQL())
@@ -1057,6 +1059,8 @@ class Field[T]:
             return False
 
         model = env[self.model_name]
+        if self.relational and getattr(env[self.comodel_name], '_access_domain_heavy', False):
+            return False
         groupby = self.name if self.type not in ('date', 'datetime') else f"{self.name}:month"
         try:
             model._read_group_groupby(Query(model).table, groupby)
@@ -1076,6 +1080,8 @@ class Field[T]:
             return False
 
         model = env[self.model_name]
+        if self.relational and getattr(env[self.comodel_name], '_access_domain_heavy', False):
+            return None
         query = model._as_query(ordered=False)
         try:
             model._read_group_select(query.table, f"{self.name}:{self.aggregator}")
@@ -1330,10 +1336,15 @@ class Field[T]:
             ))
         # Mark computed fields to recompute
         if to_compute and self.compute:
-            _logger.info("Prepare computation of %s", self)
             cr.execute(SQL('SELECT id FROM %s WHERE %s IS NULL', SQL.identifier(model._table), SQL.identifier(self.name)))
             records = model.browse(row[0] for row in cr.fetchall())
+            self._init_column_notify_compute(records)
             model.env.add_to_compute(self, records)
+
+    def _init_column_notify_compute(self, records):
+        _logger.info("Prepare computation of %s in %s records", self, len(records))
+        if len(records) > 100000:
+            _logger.warning("%s: %s records will be computed", self, len(records))
 
     ############################################################################
     #
@@ -1750,7 +1761,7 @@ class Field[T]:
         ids = expand_ids(record.id, record._prefetch_ids)
         field_cache = self._get_cache(record.env)
         prefetch_ids = (id_ for id_ in ids if id_ not in field_cache)
-        return record.browse(itertools.islice(prefetch_ids, PREFETCH_MAX))
+        return record.browse(prefetch_ids)
 
     def _insert_cache(self, records: BaseModel, values: Iterable) -> None:
         """ Update the cache of the given records with the corresponding values,
@@ -2047,8 +2058,8 @@ class Field[T]:
 
         for record in records:
             if record.id in to_compute_ids:
-                ids = expand_ids(record.id, to_compute_ids)
-                recs = record.browse(itertools.islice(ids, PREFETCH_MAX))
+                ids = tuple(expand_ids(record.id, to_compute_ids))
+                recs = record.browse(ids[:IN_MAX]).with_prefetch(ids)
                 try:
                     apply_except_missing(self.compute_value, recs)
                     continue
