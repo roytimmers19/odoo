@@ -608,12 +608,16 @@ class AccountEdiCii(models.AbstractModel):
 
     def _cii_get_applicable_header_trade_settlement_node(self, vals):
         invoice = vals['invoice']
+        has_sepa_mandate = (
+            self.module_installed('account_sepa_direct_debit')
+            and invoice.reconciled_payment_ids.mandate_id.filtered(lambda m: m.mandate_type == 'sepa')
+        )
         return {
             'ram:PaymentReference': {'_text': invoice.payment_reference},
             'ram:InvoiceCurrencyCode': {'_text': vals['currency_id'].name},
             'ram:SpecifiedTradeSettlementPaymentMeans': {
                 'ram:TypeCode': {'_text': PAYMENT_MEAN_CODES['SEPA direct debit']
-                    if self.env['account.payment']._fields.get('sdd_mandate_id') and invoice.reconciled_payment_ids.sdd_mandate_id
+                    if has_sepa_mandate
                     else PAYMENT_MEAN_CODES['Payment to bank account'],
                 },
                 'ram:PayeePartyCreditorFinancialAccount': self._cii_get_payee_party_creditor_financial_account_node(vals),
@@ -681,9 +685,11 @@ class AccountEdiCii(models.AbstractModel):
     def _cii_get_billing_specified_period_node(self, vals):
         invoice = vals['invoice']
         billing_start_dates = [invoice.invoice_date] if invoice.invoice_date else []
-        billing_start_dates += [move_line.deferred_start_date for move_line in invoice.invoice_line_ids if move_line.deferred_start_date]
         billing_end_dates = [invoice.invoice_date_due] if invoice.invoice_date_due else []
-        billing_end_dates += [move_line.deferred_end_date for move_line in invoice.invoice_line_ids if move_line.deferred_end_date]
+        if "deferred_start_date" in invoice.invoice_line_ids._fields:
+            # only checking the existence of the first of the enterprise fields
+            billing_start_dates += [move_line.deferred_start_date for move_line in invoice.invoice_line_ids if move_line.deferred_start_date]
+            billing_end_dates += [move_line.deferred_end_date for move_line in invoice.invoice_line_ids if move_line.deferred_end_date]
         start_date = end_date = None
         if billing_start_dates:
             start_date = min(billing_start_dates)
@@ -1296,8 +1302,10 @@ class AccountEdiCii(models.AbstractModel):
         end_date_str = line_tree.findtext('.//{*}BillingSpecifiedPeriod/{*}EndDateTime/{*}DateTimeString')
         if start_date_str and end_date_str:
             to_write = collected_values['to_write']
-            to_write['deferred_start_date'] = datetime.strptime(start_date_str.strip(), DEFAULT_CII_DATE_FORMAT)
-            to_write['deferred_end_date'] = datetime.strptime(end_date_str.strip(), DEFAULT_CII_DATE_FORMAT)
+            if "deferred_start_date" in self.env["account.move.line"]._fields:
+                # only checking the existence of the first of the enterprise fields
+                to_write['deferred_start_date'] = datetime.strptime(start_date_str.strip(), DEFAULT_CII_DATE_FORMAT)
+                to_write['deferred_end_date'] = datetime.strptime(end_date_str.strip(), DEFAULT_CII_DATE_FORMAT)
 
     def _import_cii_invoice_line_add_product_values(self, collected_values):
         line_tree = collected_values['line_tree']
