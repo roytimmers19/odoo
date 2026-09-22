@@ -350,7 +350,7 @@ class HrLeave(models.Model):
     @api.depends(
         'virtual_remaining_leaves', 'number_of_days', 'number_of_hours',
         'work_entry_type_id', 'employee_id', 'request_date_from', 'request_date_to',
-        'work_entry_type_request_unit'
+        'work_entry_type_id.unit_of_measure'
     )
     @api.depends_context('default_is_multi_employee')
     def _compute_allocation_warning(self):
@@ -362,7 +362,7 @@ class HrLeave(models.Model):
                 continue
 
             remaining = leave.virtual_remaining_leaves
-            is_hour = leave.work_entry_type_request_unit == 'hour'
+            is_hour = leave.work_entry_type_id.unit_of_measure == 'hour'
             request_amount = leave.number_of_hours if is_hour else leave.number_of_days
             max_excess = leave.work_entry_type_id.max_allowed_negative if leave.work_entry_type_id.allows_negative else 0
 
@@ -1309,11 +1309,10 @@ class HrLeave(models.Model):
             holiday.supported_attachment_ids_count = len(holiday.attachment_ids.ids)
 
     @api.depends_context('uid')
-    @api.depends('work_entry_type_support_document')
     def _compute_attachment_is_visible(self):
         is_privileged_user = self.env.user.has_groups('hr_holidays.group_hr_holidays_user,hr_holidays.group_hr_holidays_manager')
         for leave in self:
-            if leave.work_entry_type_support_document and (is_privileged_user or self.env.uid in (leave.user_id.id, leave.create_uid.id)):
+            if (is_privileged_user or self.env.uid in (leave.user_id.id, leave.create_uid.id)):
                 leave.attachment_is_visible = True
             else:
                 leave.attachment_is_visible = False
