@@ -1,10 +1,6 @@
 import { Store as BaseStore, fields, makeStore } from "@mail/model/export";
 import { formatLocalDateTime, resolveTimeZoneName } from "@mail/utils/common/dates";
-import {
-    attClassObjectToString,
-    generateEmojisOnHtml,
-    prettifyMessageText,
-} from "@mail/utils/common/format";
+import { attClassObjectToString, generateEmojisOnHtml } from "@mail/utils/common/format";
 import { nestedShallowEqual } from "@mail/utils/common/signal";
 
 import { proxy, shallowEqual, usePlugin } from "@odoo/owl";
@@ -23,7 +19,6 @@ import { debounce } from "@web/core/utils/timing";
 import { getOrigin } from "@web/core/utils/urls";
 import { session } from "@web/session";
 import { isMarkup, createDocumentFragmentFromContent } from "@web/core/utils/html";
-import { nbsp } from "@web/core/utils/strings";
 
 const { DateTime } = luxon;
 
@@ -183,22 +178,10 @@ export class Store extends BaseStore {
     /** @type {DebugModePlugin} */
     debugMode;
 
-    shouldSimulateDarkTheme(ctx) {
-        return (
-            (ctx?.env?.inDiscussCallView ||
-                ctx?.env?.inCallInvitation ||
-                ctx?.env.isDiscussPipBanner ||
-                ctx?.env?.inWelcomePage) &&
-            this.isOdooWhiteTheme &&
-            !ctx?.env.inDiscussActionPanel
-        );
-    }
-
     discussDropdownMenuClass(ctx) {
-        const simulateDarkTheme = this.shouldSimulateDarkTheme(ctx);
         return attClassObjectToString({
             "o-discuss-dropdownMenu d-flex flex-column": true,
-            "o-simulateDarkTheme": simulateDarkTheme,
+            "o-discussCallTheme": Boolean(ctx?.env?.inDiscussCallTheme),
         });
     }
 
@@ -841,7 +824,7 @@ export class Store extends BaseStore {
                 ...thread.getFetchParams(),
                 fetch_params: {
                     search_filter,
-                    search_term: (await prettifyMessageText(searchTerm)).replaceAll(nbsp, " "), // formatted like message_post
+                    search_term: searchTerm,
                     before,
                 },
             },
