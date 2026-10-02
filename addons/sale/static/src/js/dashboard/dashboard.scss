@@ -54,8 +54,8 @@
 }
 
 .o_date_filter_wrapper {
-    @include media-breakpoint-up(md) {
-        border-right: var(--border-width) $border-style $border-color;
+    @media screen and (min-width: 768px), print and (min-width: 188mm) {
+        border-right: var(--border-width) var(--o-bs-border-style) $border-color;
         background: transparent !important;
     }
 }

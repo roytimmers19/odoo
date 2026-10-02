@@ -7,7 +7,7 @@
     z-index: calc(var(--o-bs-zindex-modal) - 1);
     font-size: var(--o-bs-font-size-base);
 
-    @include media-breakpoint-down(md) {
+    @media screen and (max-width: 767.98px), print and (max-width: 187.98mm) {
         height: 100%;
         border-radius: inherit;
         background: var(--o-bs-popover-bg);
@@ -100,7 +100,7 @@ $o-web-calendar-colors: o-build-web-calendar-colors();
             background-color: map-get(nth($o-web-calendar-colors, $i), "color-subtle");
 
             .btn {
-                color: $body-color;
+                color: var(--o-bs-body-color);
             }
         }
     }

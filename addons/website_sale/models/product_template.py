@@ -13,7 +13,7 @@ from odoo.fields import Domain
 from odoo.http import request
 from odoo.modules.db import FunctionStatus
 from odoo.tools import float_round, is_html_empty, lazy
-from odoo.tools.sql import SQL
+from odoo.tools.sql import SQL, column_exists
 from odoo.tools.translate import adapt_translated_field_value, html_translate
 
 from odoo.addons.website.tools import text_from_html
@@ -58,12 +58,16 @@ class ProductTemplate(models.Model):
         As we don't resequence the whole tree (as `sequence` does), this field
         might have negative value.
         """
+        start_sequence = 10000
+        # Schema initialization may evaluate the default before adding the column.
+        if self.env.context.get('module') and not column_exists(self.env.cr, self._table, 'website_sequence'):
+            return start_sequence
         self.env.cr.execute(
             SQL("SELECT MAX(website_sequence) FROM %s", SQL.identifier(self._table))
         )
         max_sequence = self.env.cr.fetchone()[0]
         if max_sequence is None:
-            return 10000
+            return start_sequence
         return max_sequence + 5
 
     # === FIELDS ===#
@@ -376,6 +380,24 @@ class ProductTemplate(models.Model):
                 template_copy.product_template_image_ids
             ):
                 template_copy.product_template_image_ids[0].unlink()
+
+            # Set the image attribute values to the corresponding PTAVs of the copied template.
+            copied_ptavs = {
+                ptav.product_attribute_value_id.id: ptav.id
+                for ptav in template_copy.attribute_line_ids.product_template_value_ids
+            }
+
+            for original_image, copied_image in zip(
+                template.product_template_image_ids,
+                template_copy.product_template_image_ids,
+                strict=True,
+            ):
+                copied_image.with_context(skip_update_main_image=True).attribute_value_ids = [
+                    Command.set([
+                        copied_ptavs[ptav.product_attribute_value_id.id]
+                        for ptav in original_image.attribute_value_ids
+                    ])
+                ]
         return template_copies
 
     @api.ondelete(at_uninstall=False)
@@ -1418,12 +1440,7 @@ class ProductTemplate(models.Model):
 
     @api.model
     def _get_website_sale_search_fields(self, search_in_description=True):
-        search_fields = [
-            "name",
-            "variants_default_code",
-            "barcode",
-            "product_variant_ids.barcode",
-        ]
+        search_fields = ["name", "variants_default_code", "barcode", "product_variant_ids.barcode"]
         if search_in_description:
             search_fields.append("description_ecommerce")
         search_fields.extend((
@@ -1989,13 +2006,14 @@ class ProductTemplate(models.Model):
         return data
 
     def _mail_get_operation_for_mail_message_operation(self, message_operation):
-        if (
-            message_operation == "create"
-            and not self.env.user._is_internal()
-        ):
-            website = self.env.website or self.env['website'].browse(self.env.context.get('host_id'))
-            if not website.with_context(website_id=website.id).is_view_active('website_sale.product_comment'):
-                return [(Domain.TRUE, 'write')]
+        if message_operation == "create" and not self.env.user._is_internal():
+            website = self.env.website or self.env["website"].browse(
+                self.env.context.get("host_id")
+            )
+            if not website.with_context(website_id=website.id).is_view_active(
+                "website_sale.product_comment"
+            ):
+                return [(Domain.TRUE, "write")]
         return super()._mail_get_operation_for_mail_message_operation(message_operation)
 
     @api.model

@@ -2,7 +2,7 @@
     > span, > button {
         flex: 0 0 auto;
     }
-    @include media-breakpoint-down(md) {
+    @media screen and (max-width: 767.98px), print and (max-width: 187.98mm) {
         display: inline-block;
     }
     .o_radio_input {
@@ -25,7 +25,7 @@
     .o_vertical {
         flex-flow: column nowrap;
         .o_radio_item {
-            margin-bottom: $o-form-spacing-unit;
+            margin-bottom: var(--o-form-spacing-unit);
         }
     }
 }
