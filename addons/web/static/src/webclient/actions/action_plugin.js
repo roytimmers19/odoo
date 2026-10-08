@@ -6,7 +6,6 @@ import {
     onWillUnmount,
     Plugin,
     proxy,
-    status,
     t,
     useListener,
     usePlugin,
@@ -971,6 +970,7 @@ export function useActionManager(router = _router) {
             static template = ControllerComponentTemplate;
             static Component = controller.Component;
             props = useProps();
+            scope = useScope();
             setup() {
                 this.Component = controller.Component;
                 this.titleService = useService("title");
@@ -1013,7 +1013,7 @@ export function useActionManager(router = _router) {
                     Promise.reject(error);
                     return;
                 }
-                if (!controller.isMounted && status(this) === "mounted") {
+                if (!controller.isMounted && this.scope.status === 1) {
                     // The error occurred during an onMounted hook of one of the components.
                     bus.trigger("ACTION_MANAGER:UPDATE", {
                         id: ++id,
@@ -1096,7 +1096,7 @@ export function useActionManager(router = _router) {
                 const updateActionState = componentProps.updateActionState;
                 componentProps.updateActionState = (newState) =>
                     updateActionState(controller, newState);
-                if (this.constructor.Component === View) {
+                if (this.constructor.Component === View && action.target !== "new") {
                     componentProps.__beforeLeave__ = this.__beforeLeave__;
                     componentProps.__getGlobalState__ = this.__getGlobalState__;
                     componentProps.__getLocalState__ = this.__getLocalState__;
@@ -1108,7 +1108,7 @@ export function useActionManager(router = _router) {
             const actionDialogProps = {
                 ActionComponent: ControllerComponent,
                 actionProps: controller.props,
-                actionType: action.type,
+                action,
             };
             if (action.name) {
                 // @todo jesc: move this logic in the proper location

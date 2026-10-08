@@ -3,7 +3,7 @@
 .o_form_view {
     @media screen and (max-width: 767.98px), print and (max-width: 187.98mm) {
         --field-spacing-unit: 8px;
-        --o-field-box-spacing: #{map-get($spacers, 3)};
+        --o-field-box-spacing: var(--o-bs-spacer-3);
         --o-field-box-border-color: var(--gray-300);
 
         %-o-field-box {
@@ -43,7 +43,7 @@
             margin-bottom: calc(-1 * var(--body-font-size)) !important;
 
             /* Hide the border of the adjacent sibling box that is under the label */
-            background: linear-gradient(0deg, transparent 0%, $o-view-background-color 45%, $o-view-background-color 55%, transparent 100%);
+            background: linear-gradient(0deg, transparent 0%, var(--o-view-background-color) 45%, var(--o-view-background-color) 55%, transparent 100%);
 
             font-size: var(--o-bs-font-size-sm) !important;
             font-weight: var(--o-bs-font-weight-normal);
