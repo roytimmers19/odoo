@@ -823,10 +823,13 @@ async function session_update_and_broadcast(request) {
 
     const { session_id, values } = await parseRequestParams(request);
     const [session] = DiscussChannelRtcSession.search_read([["id", "=", session_id]]);
+    if (!session) {
+        return;
+    }
     const [currentChannelMember] = DiscussChannelMember.search_read([
         ["id", "=", session.channel_member_id[0]],
     ]);
-    if (session && currentChannelMember.partner_id[0] === serverState.partnerId) {
+    if (currentChannelMember.partner_id[0] === serverState.partnerId) {
         DiscussChannelRtcSession._update_and_broadcast(session.id, values);
     }
 }
@@ -1015,15 +1018,10 @@ function processRequest(fetchParams) {
     return store;
 }
 
-export function _resolve_messages(
-    store,
-    fetch_params,
-    { add_to_store = true, filter = () => true } = {}
-) {
+export function _resolve_messages(store, fetch_params, { add_to_store = true } = {}) {
     /** @type {import("mock_models").MailMessage} */
     const MailMessage = this.env["mail.message"];
     const res = MailMessage._message_fetch(makeKwArgs(fetch_params));
-    res.messages = res.messages.filter(filter.bind(this));
     const messageIds = res.messages.map((message) => message.id);
     if (add_to_store) {
         for (const messageId of messageIds) {
