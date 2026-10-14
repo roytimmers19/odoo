@@ -121,7 +121,7 @@
             'point_of_sale/static/src/backend/views/graph/*',
         ],
         "web.assets_web_dark": [
-            'point_of_sale/static/src/scss/pos_dashboard.dark.scss',
+            'point_of_sale/static/src/scss/pos_dashboard.dark.css',
             'point_of_sale/static/src/backend/pos_kanban_view/pos_kanban_view.dark.css',
         ],
         'web.assets_tests': [
@@ -205,6 +205,7 @@
 
             # scss variables and utilities
             'point_of_sale/static/src/scss/pos_variables_extra.scss',
+            'point_of_sale/static/src/scss/css_variables.scss',
             'web/static/src/scss/bootstrap_overridden.scss',
             'web/static/fonts/fonts.scss',
             "web/static/src/scss/ui.scss",
@@ -238,6 +239,7 @@
             "web/static/src/core/debug/**/*",
             'web/static/src/model/**/*',
             'web/static/src/views/**/*',
+            ('remove', 'web/static/src/views/**/*.dark.css'),
             'web/static/src/search/**/*',
             'web/static/src/webclient/actions/**/*',
             ('remove', 'web/static/src/webclient/actions/reports/report_layouts.scss'),
@@ -263,6 +265,7 @@
             "point_of_sale/static/src/app/utils/use_timed_press.js",
             "point_of_sale/static/src/utils.js",
             "point_of_sale/static/src/scss/pos_variables_extra.scss",
+            "point_of_sale/static/src/scss/css_variables.scss",
             "point_of_sale/static/src/customer_display/**/*",
             "point_of_sale/static/src/app/hooks/time_hook.js",
             "point_of_sale/static/src/app/pos_app.scss",
